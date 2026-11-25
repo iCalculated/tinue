@@ -6,12 +6,12 @@
 //
 // mate and winProb are from White's side, like /api/analyze. One search at a time; it can't be stopped midway (the
 // limits bound it), so a search nobody wants any more just finishes and is dropped.
-import { canonPTN } from './shared/ptn.js?v=1795581795';
-import { syntaksBoard } from './shared/judge.js?v=1795581795';
+import { canonPTN } from './shared/ptn.js?v=1795630218';
+import { syntaksBoard } from './shared/judge.js?v=1795630218';
 
 // The engine build, not the site build: the 19.5 MB file only changes when the engine is rebuilt, so the browser keeps
 // it across site deploys. build-static.sh stamps this with the wasm's own hash.
-const ENGINE = '021c832f8fcc';
+const ENGINE = '781ecad1b617';
 const workerURL = new URL('./syntaks/worker.js' + (import.meta.url.match(/\?v=[\w.]+/)?.[0] || ''), import.meta.url);
 const wasmURL = new URL('./syntaks/syntaks.wasm?e=' + ENGINE, import.meta.url).href;
 

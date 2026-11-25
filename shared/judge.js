@@ -5,12 +5,12 @@
 //
 // The play-on rules below moved here unchanged from public/playon.js, which re-exports them, so the page behaves as
 // before (scripts/test-playon.mjs).
-import { winMove } from './pns.js?v=1795581795';
+import { winMove } from './pns.js?v=1795630218';
 
 // ---- play-on rules (moved from public/playon.js) ----
 
-// The Tak rule (Sasha, 2026-11-21, a player's proposal on Discord: "if move is Tak, continue; if move is not Tak, 2 move
-// countdown. If Tak move comes in countdown, restart"; Sasha: no ceiling, "as long as you keep making Tak threats, it's
+// The Tak rule (Sasha, 2026-11-21, after a player's proposal: a Tak move continues, any other starts a 2-move countdown that a
+// Tak move resets; Sasha: no ceiling, "as long as you keep making Tak threats, it's
 // okay"). It replaces the move cap on the puzzle page (Rush keeps capMoves until its server takes longer play-outs).
 // Every move of the player's in the play-out, the move played out included, is Tak or not. A Tak move clears the
 // countdown; one that isn't starts it (or runs it down): TAK_COUNTDOWN more moves to make Tak, and if none of those is

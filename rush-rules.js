@@ -2,10 +2,10 @@
 // judging a move by the puzzle's line, where an off-line move goes next (the puzzle page's adjudication: route,
 // playOutOutcome), the clock and its pauses, the combo and its time bonuses, and the end-of-run numbers.
 // public/rush.js owns the screen and the engines and calls these with the time it read.
-import { Game, colorOf, typeOf } from './shared/tak.js?v=1795581795';
-import { quickOutcome, provenPlayOut, provenLossLead, ENGINE_MS, CAP_WAIT_MS } from './playon.js?v=1795581795';
-import * as SYM from './shared/sym.js?v=1795581795';
-import { moveShape } from './analysis.js?v=1795581795';
+import { Game, colorOf, typeOf } from './shared/tak.js?v=1795630218';
+import { quickOutcome, provenPlayOut, provenLossLead, ENGINE_MS, CAP_WAIT_MS } from './playon.js?v=1795630218';
+import * as SYM from './shared/sym.js?v=1795630218';
+import { moveShape } from './analysis.js?v=1795630218';
 
 export const SIZE = 6; // Rush and Streak are 6×6 only (server/rush.js refuses any other size)
 export const RUSH_MS = 180e3; // 3:00
@@ -398,8 +398,8 @@ export function turn(solver, prev = null) {
 }
 // The line under the board. While a move is adjudicated: the puzzle page's card heading and status (adj). Otherwise
 // the side to move comes first, always: a player reads it before anything else, and the last puzzle's ending (head,
-// after a play-out) follows it, named as the last puzzle's, never in front of it (Discord, 2026-11-21: "a bunch of
-// text that appears before the actually important info of who is to play").
+// after a play-out) follows it, named as the last puzzle's, never in front of it (a player's complaint,
+// 2026-11-21).
 export function noteText({ toMove = '', head = null, adj = null, waiting = false }) {
   if (adj) return adj;
   if (head) return `${toMove} Last puzzle: ${head}.`;
