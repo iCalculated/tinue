@@ -35,7 +35,7 @@ function world({ settled = true, rating = 1500, queue = null, next = null, hold 
   w.answer = (kind) => { const i = w.pending.findIndex((c) => !kind || c.kind === kind); assert.ok(i >= 0, 'no held ' + kind); const [c] = w.pending.splice(i, 1); c.resolve(serve(c.q)); };
   w.fail = (kind) => { const i = w.pending.findIndex((c) => !kind || c.kind === kind); assert.ok(i >= 0, 'no held ' + kind); const [c] = w.pending.splice(i, 1); c.reject(new Error('net')); };
   w.n = createNext({
-    get, store, now: () => w.t, filterKey: () => w.filters, playerKey: () => w.player, query: () => 'difficulty=normal&size=6',
+    get, store, now: () => w.t, filterKey: () => w.filters, playerKey: () => w.player, query: () => 'difficulty=normal&size=6' + (w.unsent ? '&exclude=' + w.unsent : ''),
     settled: () => w.settled, rating: () => w.rating, currentId: () => w.current,
   });
   w.batches = () => w.calls.filter((c) => c.kind === 'batch');
@@ -83,6 +83,12 @@ test('a settled player plays the queue in order, one batch request at REFILL_AT 
   assert.deepEqual(w.queued().slice(0, 2), ['q8', 'q9'], 'the batch is appended after what was queued');
   assert.equal(w.queued().length, 2 + BATCH);
   assert.equal(w.calls.filter((c) => c.kind === 'pair').length, 0, 'no pair while the queue has puzzles');
+});
+
+test('results still to be sent stay excluded from a batch (one exclude parameter)', async () => {
+  const w = world({ queue: { puzzles: q10().slice(0, 1) } }); w.unsent = 'p0,p1';
+  w.start({ id: 'p5' }); await flush();
+  assert.deepEqual(w.batches()[0].q.getAll('exclude').length, 1); for (const id of ['p0', 'p1', 'p5', 'q0']) assert.ok(w.batches()[0].q.get('exclude').split(',').includes(id), id);
 });
 
 test('a drift over DRIFT replaces the queue, but only once the new batch has arrived', async () => {

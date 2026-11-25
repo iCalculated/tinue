@@ -59,6 +59,7 @@ X
 
 # 2. accounts and directories. /srv/tinue is code (root's: the service cannot change it), /var/lib/tinue is state.
 id tinue >/dev/null 2>&1 || run useradd --system --user-group --home-dir /nonexistent --shell /usr/sbin/nologin tinue
+id tinue-build >/dev/null 2>&1 || run useradd --system --user-group --create-home --home-dir /var/lib/tinue-build --shell /bin/sh tinue-build # compiles the engine; no sudo
 id mover >/dev/null 2>&1 || run useradd --create-home --user-group --shell /bin/sh mover
 dir 755 root root /srv/tinue; dir 755 "$LOGIN" "$LOGIN" /srv/tinue/deploy
 dir 700 tinue tinue /var/lib/tinue; dir 700 mover mover /var/lib/tinue-in; dir 750 root mover /var/lib/tinue-out
@@ -73,6 +74,12 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 X11Forwarding no
 AllowUsers $LOGIN mover
+ClientAliveInterval 5
+ClientAliveCountMax 3
+Match User mover
+  AuthorizedKeysFile /etc/ssh/authorized_keys.d/%u
+  PermitTTY no
+  AllowAgentForwarding no
 X
 if [ -n "$CHANGED" ] && [ -z "$DRY" ]; then
   H=$(getent passwd "$LOGIN" | cut -d: -f6)
@@ -82,14 +89,14 @@ fi
 if [ -n "$KEY" ]; then
   [ "$(grep -c '^ssh-' "$KEY")" = 1 ] || { echo "provision: $KEY is not one public key" >&2; exit 1; }
   O=restrict; [ -z "$HOP" ] || O='restrict,port-forwarding,permitlisten="127.0.0.1:8643",permitopen="127.0.0.1:80"'
-  run install -d -m 700 -o mover -g mover /home/mover/.ssh
-  echo "$O $(grep '^ssh-' "$KEY" | cut -d' ' -f1,2) mover" | put 644 /home/mover/.ssh/authorized_keys
+  echo "$O $(grep '^ssh-' "$KEY" | cut -d' ' -f1,2) mover" | put 644 /etc/ssh/authorized_keys.d/mover # (root's: mover cannot widen it)
 fi
 
 # 4. firewall: 22 by key from anywhere, 80 and 443 from Cloudflare only. A bad set undoes itself.
-{ sed '/^@CF@$/,$d' "$HERE/nftables.conf"; sh "$HERE/cloudflare-ranges.sh" nft; sed '1,/^@CF@$/d' "$HERE/nftables.conf"; } | put 600 /etc/nftables.conf.new
-if cmp -s /etc/nftables.conf.new /etc/nftables.conf && nft list table inet tinue >/dev/null 2>&1; then rm -f /etc/nftables.conf.new
+F=$(mktemp); { sed '/^@CF@$/,$d' "$HERE/nftables.conf"; sh "$HERE/cloudflare-ranges.sh" nft; sed '1,/^@CF@$/d' "$HERE/nftables.conf"; } > "$F"
+if cmp -s "$F" /etc/nftables.conf && nft list table inet tinue >/dev/null 2>&1; then rm -f /etc/nftables.conf.new
 else
+  put 600 /etc/nftables.conf.new < "$F"
   say "firewall: loading; undone in 5 minutes unless 'provision.sh --confirm-firewall' is run from a NEW ssh session"
   if [ -z "$DRY" ]; then
     nft -c -f /etc/nftables.conf.new
@@ -99,6 +106,8 @@ else
     nft -f /etc/nftables.conf.new
   fi
 fi
+
+rm -f "$F"
 
 # 5. caddy
 R=$(mktemp); sh "$HERE/cloudflare-ranges.sh" caddy > "$R"; put 644 /etc/caddy/cf-ranges.caddy < "$R"; C=$CHANGED; rm -f "$R" # (not a pipe: CHANGED would be a subshell's)

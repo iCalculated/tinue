@@ -114,7 +114,9 @@ const puzzlesOnCrux = () => JSON.stringify(q('SELECT * FROM puzzles ORDER BY id'
     assert.notEqual(f.code, 0, a[0] + ' went to a fenced host'); assert.match(f.out, /refused: this host is fenced/);
     assert.ok(!log().some((l) => /^rsync|^launchctl|import\.mjs|elsewhere/.test(l)), log().join('\n'));
   }
+  clearLog(); ok(sh('deploy-crux.sh', ['--fenced']), 'code onto a fenced crux'); assert.ok(log().some((l) => /^rsync .*server/.test(l)) && !log().some((l) => /^launchctl|^tailscale/.test(l)), log().join('\n'));
   fs.rmSync(path.join(CRUX, 'Projects/tinue/data/MOVED'));
+  clearLog(); assert.notEqual(sh('deploy-crux.sh', ['--fenced']).code, 0); assert.ok(!log().some((l) => /^rsync/.test(l)));
   console.log('code deploy: ok (no puzzle row touched, health after restart, revision recorded, health failure fails)');
 }
 

@@ -121,6 +121,7 @@ await nav(OLD + '#/puzzle/' + ids[2]); await atNew('/puzzle/' + ids[2]);
 assert.equal(await ls('token'), t1); assert.equal((await ls('prefs')).difficulty, 'harder'); assert.equal((await ls('r.' + o1 + '.' + ids[1])).body.win, false);
 assert.equal(await ev('sessionStorage.getItem("tinue.hs")'), null); assert.equal(attempts().length, 1);
 down = false; await nav(NEW); await atNew(); await named('tester1'); await until(`localStorage.getItem('tinue.r.${o1}.${ids[1]}') === null`, 'sent from the new page');
+assert.equal((await ls('brought')).o, o1);
 assert.deepEqual(attempts().map((a) => [a.name, a.id]), [['tester1', ids[0]], ['tester1', ids[1]]]);
 step('a visit to the old page while the API is down: player, settings and the unsent result arrive; the result is sent once, from the new page');
 await nav(OLD + '#/me'); await atNew('#/me'); await named('tester1'); await until(`!!document.querySelector('.hist')`, 'History');
@@ -132,10 +133,20 @@ await nav(OLD + '#/evil//x?https://example.com'); await atNew('/puzzle/' + ids[0
 step('old puzzle pages, their 404s and unknown routes land on the new site');
 
 // ---------- 3: signed out stays signed out; asked for, it comes back ----------
-await setOn(NEW, {}); await nav(OLD + '#/'); await atNew(); await sleep(400); assert.equal(await ls('token'), null);
-await ev(`(document.querySelector('#claim-open').click(), true)`); assert.match(await ev(`document.querySelector('#userbox').innerText`), /Played on shydrie\.xyz\? Bring your account/);
-await shot('bring'); await ev(`(document.querySelector('[data-bring]').click(), true)`); await until(`localStorage.getItem('tinue.token') !== null`, 'brought').catch(async () => { throw new Error(urls.join('\n')); }); await atNew(); await named('tester1'); assert.equal(await ls('token'), t1);
-step('signed out on the new page: the old one signs nobody in again, unless asked to ("Bring your account")');
+await nav(NEW); await atNew(); await named('tester1'); await ev(`(localStorage.setItem('tinue.parked', JSON.stringify({ token: ${JSON.stringify(t2)}, gid: null, name: 'tester2' })), true)`);
+await ev(`(document.querySelector('#logout-yes').click(), true)`); await until(`localStorage.getItem('tinue.token') === null && !!document.querySelector('#claim-open')`, 'signed out');
+assert.equal(await ls('parked'), null); await ev(`(document.querySelector('#claim-open').click(), true)`); assert.doesNotMatch(await ev(`document.querySelector('#userbox').innerText`), /Bring your account|Switch to/);
+await nav(OLD + '#/'); await atNew(); await sleep(400); assert.equal(await ls('token'), null);
+await nav(NEW + '#hs=1&o=zzz&to=x'); await atNew(); await sleep(400); assert.equal(await ls('token'), null, 'nor by a crafted link'); await ev(`tinueBring()`); await atNew(); await sleep(600); assert.equal(await ls('token'), null);
+step('signed out on the new page: the old one signs nobody in again, parked players are gone too');
+await setOn(NEW, {}); await nav(NEW); await atNew(); await ev(`(document.querySelector('#claim-open').click(), true)`); assert.match(await ev(`document.querySelector('#userbox').innerText`), /Played on shydrie\.xyz\? Bring your account/);
+await shot('bring'); await ev(`(document.querySelector('[data-bring]').click(), true)`); await until(`localStorage.getItem('tinue.token') !== null`, 'brought'); await atNew(); await named('tester1'); assert.equal(await ls('token'), t1);
+step('"Bring your account" for someone who came straight to the new page');
+// a hop that never arrives: the next visit brings the player all the same
+await setOn(NEW, {}); await cdp('Fetch.enable', { patterns: [STANDIN_PATTERN, { urlPattern: 'https://*' }, { urlPattern: NEW + '*', resourceType: 'Document' }] });
+await nav(OLD); await sleep(1500); await cdp('Fetch.enable', { patterns: [STANDIN_PATTERN, { urlPattern: 'https://*' }] });
+await setOn(NEW, {}); await cdp('Page.navigate', { url: OLD + '#hn=' + Buffer.from(new Uint8Array(await crypto.subtle.exportKey('raw', (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey'])).publicKey))).toString('base64url') }); await atNew(); assert.equal(await ls('token'), null); await nav(OLD); await atNew(); await named('tester1');
+step('a hop that fails and a crafted key cost nothing: the next visit brings the player');
 
 // ---------- 4: two players ----------
 await setOn(OLD, { token: t1, prefs }); await setOn(NEW, { token: t2, gid: 'b'.repeat(32) });
@@ -154,8 +165,8 @@ await nav(OLD + '#/settings'); await atNew('#/settings'); await named('tester1')
 const ht = reqs.filter((r) => r.url === '/api/handoff-token'); assert.equal(ht.length, 1); assert.equal(ht[0].o, new URL(OLD).origin); assert.equal(ht[0].auth, undefined);
 await cdp('Network.clearBrowserCookies');
 await setOn(OLD, { gid: 'c'.repeat(32), prefs }); await setOn(NEW, {}); await nav(OLD); await atNew(); assert.equal(await ls('token'), null); assert.equal(await ls('gid'), 'c'.repeat(32)); assert.equal((await ls('prefs')).difficulty, 'harder');
-assert.ok(await readOn(OLD, 'moved')); // (401: there is nobody)
-await setOn(OLD, {}); await setOn(NEW, {}); tokenMode = 'off'; await nav(OLD); await atNew(); assert.equal(await readOn(OLD, 'moved'), null, 'no answer about the cookie: asked again next time'); tokenMode = 'ok';
+assert.equal((await ls('brought')).o, ''); assert.equal(await readOn(OLD, 'gid'), null, 'a guest id is not left on two origins'); assert.equal(await readOn(OLD, 'gidWas'), 'c'.repeat(32)); // (401: there is nobody)
+await setOn(OLD, {}); await setOn(NEW, {}); tokenMode = 'off'; await nav(OLD); await atNew(); assert.equal(await ls('brought'), null, 'no answer about the cookie: asked again next time'); tokenMode = 'ok';
 step('a cookie-only player arrives signed in; one without a player keeps gid and settings');
 
 // ---------- 6: results of a visitor without a token, a held one, a Rush queue larger than an address ----------
@@ -163,11 +174,17 @@ const anon = entry(ids[4], ''); anon.gid = 'd'.repeat(32);
 await setOn(OLD, { gid: 'd'.repeat(32), ['r..' + ids[4]]: anon }); await setOn(NEW, {}); await nav(OLD); await atNew();
 const tok = await ls('token'); assert.match(tok, /^[a-f0-9]{48}$/); assert.equal((await call('/api/me', null, tok)).user.name, null); assert.equal(attempts().filter((a) => a.name === null).length, 1);
 step('a tokenless visitor: the unsent result makes the guest, and the guest arrives');
+// the same while the API is down: the result goes along and makes the guest from the new page; a later visit does not take that guest's token away
+{ const g = 'a1'.repeat(16), e2 = { ...entry(ids[6], ''), gid: g }; await setOn(OLD, { gid: g, ['r..' + ids[6]]: e2 }); await setOn(NEW, {}); down = true; await nav(OLD); await atNew(); assert.ok(await ls('r..' + ids[6])); down = false; await nav(NEW); await atNew(); await until(`localStorage.getItem('tinue.token') !== null`, 'guest made'); const tg = await ls('token');
+  for (let i = 0; i < 2; i++) { await nav(OLD); await atNew(); await sleep(500); assert.equal(await ls('token'), tg); } const u = (await call('/api/me', null, tg)).user; assert.ok(u && u.games === 1, JSON.stringify(u)); assert.equal(attempts().filter((a) => a.id === ids[6]).length, 1); }
+step('a tokenless result carried over an outage: one guest, whose token stays good');
 await setOn(OLD, { token: t1 }, { held: { id: ids[5], ms: 5, win: true, theme: '', b: 1794817281, owner: o1, page: 'gone' } }); await setOn(NEW, {});
 await cdp('Page.navigate', { url: OLD }); await atNew(); await named('tester1'); assert.deepEqual(attempts().filter((a) => a.id === ids[5]).map((a) => [a.name, a.win]), [['tester1', 1]]);
 step('a held result of this tab is sent');
+await setOn(NEW, { token: t1, ['r.' + o1 + '.' + ids[7]]: entry(ids[7], o1) }); down = true; await nav(NEW + '#/'); await until(`/reach the puzzle server/.test(document.querySelector('#feedback').innerText)`, 'the notice', 40000); down = false; await ev(`(dispatchEvent(new Event('online')), true)`); await until(`!document.querySelector('#ptn-in').disabled && location.pathname.includes('/puzzle/')`, 'a puzzle'); assert.equal(await ls('r.' + o1 + '.' + ids[7]), null);
+step('a cold load during an outage gets its puzzle when the queued result has gone out');
 const big = Array.from({ length: 20 }, (_, i) => ({ t: Date.now() - 1e6 + i, who: o1, body: { run: `${(Date.now() - 1e6).toString(36)}.r${i}.mac`, pad: 'x'.repeat(8000), mode: 'rush' } }));
-const snap = { t: Date.now(), who: o1, snap: Date.now(), body: { run: `${Date.now().toString(36)}.live.mac`, mode: 'rush' } };
+const snap = { t: Date.now(), who: o1, snap: Date.now(), body: { run: `${Date.now().toString(36)}.live.mac`, mode: 'rush', abandoned: true } };
 await setOn(OLD, { token: t1, rushQueue: [...big, snap] }); await setOn(NEW, {}); down = true; await nav(OLD); await atNew(); 
 const carried = (await ls('rushQueue')).length; assert.ok(carried >= 3 && carried < 20, String(carried)); down = false;
 await nav(OLD); await atNew(); assert.deepEqual([...rushRuns].sort(), big.map((x) => x.body.run).sort(), 'each run once'); assert.deepEqual((await readOn(OLD, 'rushQueue')).map((x) => x.body.run), [snap.body.run], 'the live one stays');

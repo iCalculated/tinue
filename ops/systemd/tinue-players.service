@@ -1,7 +1,7 @@
 [Unit]
 Description=tinue players page
 After=tinue.service
-ConditionPathExists=/var/lib/tinue/WRITER
+ConditionPathExists=/etc/tinue/WRITER
 StartLimitIntervalSec=0
 [Service]
 User=tinue

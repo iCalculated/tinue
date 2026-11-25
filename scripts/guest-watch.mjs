@@ -45,7 +45,7 @@ const token = fs.readFileSync(ENV, 'utf8').match(/^DISCORD_BOT_TOKEN=["']?([^"'\
 if (!token) throw new Error('no DISCORD_BOT_TOKEN in ' + ENV);
 const api = async (p, body) => {
   const r = await fetch('https://discord.com/api/v10' + p, { method: 'POST', body: JSON.stringify(body),
-    headers: { Authorization: 'Bot ' + token, 'Content-Type': 'application/json', 'User-Agent': 'DiscordBot (https://tinue.me, 1.0)' } });
+    headers: { Authorization: 'Bot ' + token, 'Content-Type': 'application/json', 'User-Agent': 'DiscordBot (https://shydrie.xyz/tinue, 1.0)' } });
   if (!r.ok) throw new Error(`${p} ${r.status} ${await r.text()}`);
   return r.json();
 };

@@ -30,5 +30,9 @@ else {
     if (!fs.existsSync(f)) fs.linkSync(LATEST, f);
     for (const old of fs.readdirSync(DIR).filter((x) => x.startsWith(kind + '-')).sort().slice(0, -KEEP[kind])) fs.rmSync(path.join(DIR, old));
   }
+  // one line for crux, which reads it with the backup and says so if it is not "ok"
+  let md = ''; try { md = fs.readFileSync('/proc/mdstat', 'utf8'); } catch {}
+  const st = fs.statfsSync(DIR);
+  fs.writeFileSync(path.join(DIR, 'health'), ([/\[[U_]*_[U_]*\]/.test(md) && 'a disk mirror is degraded', st.bavail / st.blocks < 0.1 && 'the disk is nearly full'].filter(Boolean).join('; ') || 'ok') + '\n');
   console.log(`backup: ${fs.statSync(LATEST).size} bytes`);
 }

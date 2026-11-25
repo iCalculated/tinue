@@ -5,7 +5,9 @@
 # Players reach the API two ways: Cloudflare Tunnel at https://tinue-api.shydrie.xyz (primary; cloudflared is its own
 # service on crux, never touched here) and Tailscale Funnel at https://crux.tail5ed24.ts.net:8443 (kept for old builds,
 # bots and shared links; re-enabled here, on 8443 only).
-# usage: scripts/deploy-crux.sh [--dry-run] [--legacy]
+# usage: scripts/deploy-crux.sh [--dry-run] [--legacy] [--fenced]
+#   --fenced   only onto a fenced crux: the code and its revision, nothing started (before a rollback: the code that
+#              starts there must be the one that last wrote the database). Deploy again after the rollback.
 #   --dry-run  print every ssh/rsync and the remote script instead of running them
 #   --legacy   the old path (scripts/deploy-crux-legacy.sh): code plus a full export and re-import of every puzzle.
 #              Kept until this path has been used for real once.
@@ -13,10 +15,12 @@
 # (ship.sh does, as a hard failure); run scripts/check-public.sh after a bare deploy.
 set -e
 cd "$(dirname "$0")/.."
+FENCED=
 for a in "$@"; do case "$a" in
   --legacy) shift_legacy=1 ;;
   --dry-run) ;;
-  *) echo "deploy-crux: unknown option $a (usage: scripts/deploy-crux.sh [--dry-run] [--legacy])" >&2; exit 2 ;;
+  --fenced) FENCED=1 ;;
+  *) echo "deploy-crux: unknown option $a (usage: scripts/deploy-crux.sh [--dry-run] [--legacy] [--fenced])" >&2; exit 2 ;;
 esac; done
 [ -n "$shift_legacy" ] && exec sh scripts/deploy-crux-legacy.sh "$@"
 unset TINUE_HOST # this script means crux, whatever the shell says
@@ -30,9 +34,12 @@ case "$REV" in *'"dirty":true'*) echo "deploy: WARNING the working tree differs 
 if [ -n "$DRY" ]; then echo "[dry-run] write $STATE/revision.json"; else printf '%s\n' "$REV" > "$STATE/revision.json"; fi
 
 # 2. ship code (dev/ test pages and scripts/archive/ one-offs never go). No puzzle export, no import.
+[ -z "$FENCED" ] || UNFENCED="test -e $RCD/data/MOVED || { echo 'refused: this host is not fenced' >&2; exit 1; }"
 remote "$UNFENCED"'; mkdir -p ~/Projects/tinue/data ~/Projects/tinue/deploy ~/Library/Logs'
 push --exclude scripts/archive package.json server shared public scripts "$HOST":Projects/tinue/
 push "$STATE/revision.json" "$HOST":Projects/tinue/deploy/revision.json
+
+if [ -n "$FENCED" ]; then echo "deploy: code only (fenced); nothing started"; exit 0; fi
 
 # 3. (re)start the launchd service, wait for health, keep Funnel on 8443 (cloudflared is not managed here)
 remote "set -e; cd ~/Projects/tinue

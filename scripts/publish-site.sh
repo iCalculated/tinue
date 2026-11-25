@@ -56,6 +56,8 @@ fi
 if [ -n "$SUB" ]; then
   BASE="$BRANCH"; if [ "$BRANCH" = moved ] && [ -z "$(git -C "$D" ls-remote origin refs/heads/moved)" ]; then BASE=site; fi # (the first one starts from the page it replaces)
   git -C "$D" fetch -q origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+  if [ "$BRANCH" = site ] && git -C "$D" cat-file -e "origin/site:CNAME" 2>/dev/null; then
+    echo "publish-site: branch site is tinue.me's own now (it has a CNAME); nothing published (PAGES=<checkout> for tinue.me)" >&2; exit 1; fi
   git -C "$D" reset -q --soft "origin/$BASE" # the build replaces every file, so whatever was checked out doesn't matter
   git -C "$D" add -A
   if git -C "$D" diff --cached --quiet; then echo "publish-site: the build is unchanged; nothing to commit on $BRANCH"

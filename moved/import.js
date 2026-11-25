@@ -1,7 +1,8 @@
 // Inlined first in index.html's head when the page is built for its own domain (scripts/build-static.sh, DOMAIN set).
 // The other half is handoff.html, on the old address. Rounds (every hop a location.replace):
-//   old page  -> here #hs=1&to=<route>                 "you have not been here yet"
-//   here      -> old page #hn=<public key>&to=<route>  a one-use key pair made in this tab, its private half kept here
+//   old page  -> here #hs=1&o=<its player>[&u=1]&to=<route>   u: it has results the server never got
+//     (if that player has been brought (tinue.brought, kept here: only this side knows it arrived) and nothing is unsent: done)
+//   here      -> old page #hn=<public key>[&m=1][&t=1]&to=<route>   m: only what was never sent; t: a hash of the browser id here; a one-use key pair made in this tab, its private half kept here
 //   old page  -> here #hd=<the payload encrypted for that key>&to=<route>
 // Encrypted because a browser keeps every address in its history (and may sync it), replaced or not, and the payload
 // holds the player's token. The key is also the nonce: only the old page was told it, it is used once, within two
@@ -20,19 +21,19 @@
   var EC = { name: 'ECDH', namedCurve: 'P-256' }, AES = { name: 'AES-GCM', iv: new Uint8Array(12) }; // (a fresh key per message: the iv needn't vary)
   var b64 = function (buf) { var s = '', u = new Uint8Array(buf), i; for (i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
   var un64 = function (t) { var s = atob(t.replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(s.length), i; for (i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
-  // To the old page for this browser's player there. force: although it was brought before. → whether it leaves.
-  async function go(to, force) {
+  // To the old page for this browser's player there. only: just what was never sent. → whether it leaves.
+  async function go(to, only) {
     if (window.top !== window.self) return false;
     try {
       var pair = await crypto.subtle.generateKey(EC, true, ['deriveKey']);
       var s = JSON.stringify({ k: await crypto.subtle.exportKey('jwk', pair.privateKey), t: Date.now() }), pub = b64(await crypto.subtle.exportKey('raw', pair.publicKey));
       SS.setItem('tinue.hs', s);
       if (SS.getItem('tinue.hs') !== s) return false;
-      location.replace(OLD + '#hn=' + pub + (force ? '&f=1' : '') + '&to=' + encodeURIComponent(to));
+      location.replace(OLD + '#hn=' + pub + (only ? '&m=1' : '') + (get('gid') ? '&t=' + ownerOf(get('gid')) : '') + '&to=' + encodeURIComponent(to));
       return true;
     } catch (e) { return false; }
   }
-  window.tinueBring = function () { return go('#/', true); };
+  window.tinueBring = function () { return go('#/'); };
   async function open(s, d) {
     var u = un64(d), priv = await crypto.subtle.importKey('jwk', s.k, EC, false, ['deriveKey']), eph = await crypto.subtle.importKey('raw', u.slice(0, 65), EC, false, []);
     var key = await crypto.subtle.deriveKey({ name: 'ECDH', public: eph }, priv, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
@@ -58,22 +59,32 @@
     var k = 'tinue.r.' + e.owner + '.' + e.puzzleId;
     try { if (LS.getItem(k) == null) LS.setItem(k, JSON.stringify(e)); } catch (x) {}
   }
+  // This browser's guest, from before it had a token: what it played is the player's who is here now.
+  function adopt(x, cur) {
+    var g = isObj(x) && (x.gid || (isObj(x.body) && isObj(x.body.guest) && x.body.guest.gid)), o = ownerOf(cur);
+    if (cur && g && g === get('gid')) { if (x.owner === '') x.owner = o; if (x.who === null) x.who = o; }
+    return x;
+  }
+  window.tinueBrought = function (t) { set('brought', { o: ownerOf(t), t: Date.now() }); };
   // → whether the identity here changed (the page is loaded again with it).
   function take(p) {
     if (!isObj(p) || p.v !== 1) return false;
     var cur = get('token'), y = isToken(p.token) ? p.token : null, q, seen = {};
     // what was never sent, whoever is signed in here: it goes out only as the player who played it
-    if (Array.isArray(p.results)) p.results.slice(0, 50).forEach(addResult);
+    if (Array.isArray(p.results)) p.results.slice(0, 50).forEach(function (e) { addResult(adopt(e, cur)); });
     if (Array.isArray(p.rushQueue)) {
       q = get('rushQueue'); q = (Array.isArray(q) ? q : []).filter(isObj);
       q.forEach(function (x) { if (isObj(x.body)) seen['r' + x.body.run] = 1; });
-      p.rushQueue.slice(0, 20).forEach(function (x) { if (isObj(x) && isObj(x.body) && typeof x.body.run === 'string' && !seen['r' + x.body.run]) { seen['r' + x.body.run] = 1; q.push(x); } });
+      p.rushQueue.slice(0, 20).forEach(function (x) { if (isObj(x) && isObj(x.body) && typeof x.body.run === 'string' && !seen['r' + x.body.run]) { seen['r' + x.body.run] = 1; q.push(adopt(x, cur)); } });
       if (q.length) set('rushQueue', q);
     }
-    if (p.moved || (y && y === cur)) return false; // brought before (signed out here since: stays signed out), or the same player
+    if (p.moved) return false; // brought before
+    if (y && (get('out') || []).indexOf(ownerOf(y)) >= 0) { window.tinueBrought(y); return false; } // signed out here: stays signed out
+    if (y && y === cur) { window.tinueBrought(y); return false; }
     if (y && cur) { try { SS.setItem('tinue.hp', JSON.stringify(p)); } catch (e) {} return false; } // two players: app.js asks
-    if (!y && (cur || get('gid'))) return false;
+    if (!y && (cur || get('gid'))) { if (p.known) window.tinueBrought(null); return false; }
     install(p);
+    if (y ? get('token') === y : p.known) window.tinueBrought(y); // (known: the server said there is nobody; unanswered, it is asked again)
     return true;
   }
   var h = location.hash;
@@ -82,7 +93,11 @@
   try { to = decodeURIComponent(part('to')); } catch (e) {}
   if (!ROUTE.test(to)) to = '#/';
   history.replaceState(null, '', location.pathname + to);
-  if (part('hs') === '1') { window.TINUE_WAIT = go(to); return; }
+  if (part('hs') === '1') {
+    var was = get('brought'), o = part('o'), had = isObj(was) && (!o || o === was.o);
+    if (!had || part('u') === '1') window.TINUE_WAIT = go(to, had);
+    return;
+  }
   var s = null, d = part('hd');
   try { s = JSON.parse(SS.getItem('tinue.hs')); SS.removeItem('tinue.hs'); } catch (e) {}
   if (!d || !s || !(Date.now() - s.t >= 0 && Date.now() - s.t < 120e3)) return;

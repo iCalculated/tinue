@@ -164,7 +164,10 @@ const results = (() => {
       if (h?.id === e.puzzleId && h.owner === e.owner) heldRec.del(h.id);
       if (r.token && ours) { setToken(r.token); ownHeld(); }
       if (r.user && ours) { me = r.user; renderUser(); }
-      if (notice?.kind === 'net' || notice?.kind === 'wait') { setNotice(null); renderAll(); } // (it answers again)
+      if (notice?.kind === 'net' || notice?.kind === 'wait') { // (it answers again: a first puzzle that failed to load is asked for again)
+        const failed = notice.kind === 'net' && (!S || S.placeholder);
+        setNotice(null); renderAll(); if (failed) route();
+      }
       if (s?.queued && s.p.id === e.puzzleId) {
         s.queued = false; s.resend = false; s.notCounted = r.user ? null : 'error';
         if (r.user) { s.delta = r.rated ? r.userDelta : null; s.serverRated = !!r.rated; s.repeat = !r.rated && !s.casual; if (r.rated) s.p.attempts++; }
@@ -220,9 +223,11 @@ function renderUser() {
     menu.addEventListener('mouseleave', fold); menu.addEventListener('focusout', fold);
     $('#logout-yes').onclick = async () => {
       await abandonAll({ auth: true }); restoreLeft();
+      const was = token;
       // (signed out only once the server says so: its cookie would keep naming the player)
       try { const r = await api('/api/logout', {}); if (r?.error) throw new Error(r.error); } catch { $('#logout-err')?.classList.remove('hidden'); return; }
       authEpoch++; signIn++; setToken(null); forgetNext(); me = null; serverSettings = null; syncState = 'saved'; // (this device keeps its settings)
+      if (window.TINUE_OLD) { store.set('out', [...new Set([...store.get('out', []), ...[was, parked()?.token].filter(Boolean).map(ownerOf)])]); store.del('parked'); } // (the old address may still have this player: moved/import.js leaves it there)
       session.length = 0; saveSession(); renderUser(); refreshPage(); };
   } else {
     // One quiet button; claiming a name (or pasting a token) happens in a small popover.
@@ -291,7 +296,7 @@ async function switchTo(p) {
   if (now.token && now.token !== p.token) store.set('parked', now); else store.del('parked');
   window.tinueInstall(p); location.reload();
 }
-const bringLine = () => window.TINUE_OLD && !me?.name ? '<p class="hint">Played on shydrie.xyz? <button type="button" class="link" data-bring>Bring your account</button></p>' : '';
+const bringLine = () => window.TINUE_OLD && !me?.name && !store.get('out', []).includes(store.get('brought', null)?.o) ? '<p class="hint">Played on shydrie.xyz? <button type="button" class="link" data-bring>Bring your account</button></p>' : '';
 const parkedLine = (cls = '', role = '') => { const p = parked(); return p ? `<button type="button" class="link ${cls}"${role} data-unpark>Switch to ${esc(p.name || 'your other guest')}</button>` : ''; };
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-bring]')) window.tinueBring?.();
@@ -300,7 +305,7 @@ document.addEventListener('click', (e) => {
 // Both origins had a player: the one here stays until this is answered.
 async function askTwo() {
   let p = null; try { p = JSON.parse(sessionStorage.getItem('tinue.hp')); } catch {}
-  const done = () => { try { sessionStorage.removeItem('tinue.hp'); } catch {} };
+  const done = () => { try { sessionStorage.removeItem('tinue.hp'); } catch {} if (p?.token) window.tinueBrought?.(p.token); };
   if (!p || !window.TINUE_OLD || !token || p.token === token) return done();
   const r = await fetch(API + '/api/me', { headers: { authorization: 'Bearer ' + p.token }, credentials: 'omit' }).then((x) => x.json()).catch(() => null);
   if (!r) return; // (asked again at the next load)

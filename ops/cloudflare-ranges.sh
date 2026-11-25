@@ -13,6 +13,6 @@ case "$1" in
   check) NEW=$({ curl -fsS --max-time 30 https://www.cloudflare.com/ips-v4; echo; curl -fsS --max-time 30 https://www.cloudflare.com/ips-v6; echo; } | grep . | LC_ALL=C sort -u)
     [ "$(printf '%s\n' "$NEW" | wc -l)" -ge 10 ] || { echo "cloudflare-ranges: no list came" >&2; exit 1; }
     if [ "$NEW" = "$(LC_ALL=C sort -u "$F")" ]; then echo "cloudflare-ranges: unchanged"
-    else echo "cloudflare-ranges: Cloudflare's list CHANGED; update ops/cloudflare-ranges.txt and run provision.sh:"; printf '%s\n' "$NEW"; exit 1; fi ;;
+    else echo "cloudflare-ranges: Cloudflare's list CHANGED; update ops/cloudflare-ranges.txt run provision.sh on the host and, from a new session within 5 minutes, provision.sh --confirm-firewall:"; printf '%s\n' "$NEW"; exit 1; fi ;;
   *) echo "usage: cloudflare-ranges.sh caddy | nft | check" >&2; exit 2 ;;
 esac

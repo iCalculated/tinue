@@ -943,7 +943,7 @@ function checkpoint() {
 
 // SIGTERM (a restart, or the move to another host): take no new connections, finish the requests under way (at most
 // STOP_MS), empty the WAL into the database, exit 0. A result being written is answered, not cut off.
-const STOP_MS = 8000;
+const STOP_MS = 2500;
 function shutdown() {
   if (stopping) return;
   stopping = true;

@@ -350,7 +350,7 @@ await test('offline: spare runs (age, per-mode count, size), the result queue (r
   assert.deepEqual(q.map((x) => x.t), [now - 3 * D, now - D]);
   assert.deepEqual(R.queueOf('corrupt', now), []);
   const full = R.queueOf(Array.from({ length: 30 }, (_, i) => item(now - i * 1000)), now);
-  assert.equal(full.length, R.QUEUE_MAX); assert.equal(full.at(-1).t, now); assert.equal(full[0].t, now - 19000);
+  assert.equal(full.length, R.QUEUE_MAX); assert.equal(R.queueOf([...Array.from({ length: 20 }, (_, i) => item(now - (i + 1) * 1000)), { ...item(now), snap: now }], now).length, R.QUEUE_MAX + 1, 'a run being posted pushes none out'); assert.equal(full.at(-1).t, now); assert.equal(full[0].t, now - 19000);
 });
 
 await test('timing: per move, from the board taking it to the first input and to the move; the run\'s setting; abandoning', () => {

@@ -1,6 +1,6 @@
 [Unit]
 Description=tinue database backup
-ConditionPathExists=/var/lib/tinue/WRITER
+ConditionPathExists=/etc/tinue/WRITER
 [Service]
 Type=oneshot
 User=tinue

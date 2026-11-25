@@ -3,7 +3,7 @@
 //   checkpoint DB       fold the WAL in and leave none behind; fails if anything else has the database open
 //   manifest DB         print what the file holds, as JSON (below)
 //   verify DB MANIFEST  exit 1 unless DB is that file and holds exactly that (before any server opens it)
-//   stats-eq A B        exit 1 unless two /api/stats answers agree (counts exactly, averages to 1e-9)
+//   stats-eq A B        exit 1 unless two /api/stats answers have the same number of puzzles; say so if anything else in them differs
 //   count DB            the number of puzzles
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -75,7 +75,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (cmd === 'checkpoint' && a) checkpoint(a);
     else if (cmd === 'manifest' && a) console.log(JSON.stringify(manifest(a)));
     else if (cmd === 'verify' && b) { const m = verify(a, read(b)); console.log(`verify: ok ${m.sha.slice(0, 12)} ${m.size} bytes, ${m.tables.attempts.n} attempts, ${m.tables.users.n} users, ${m.tables.rush_runs.n} rush runs`); }
-    else if (cmd === 'stats-eq' && b) { statsEq(read(a), read(b)); console.log('stats: equal'); }
+    else if (cmd === 'stats-eq' && b) {
+      const x = read(a), y = read(b);
+      assert.equal(y.n, x.n, 'n'); assert.ok(x.n >= 0, 'no n');
+      try { statsEq(x, y); console.log('stats: equal'); } catch (e) { console.log(`stats: WARNING the same ${x.n} puzzles, but ${e.message.split('\n')[0]} (a result played between the two; the database itself is checked by its sum)`); } // (one that came to crux outside the gate after fence had asked)
+    }
     else if (cmd === 'count' && a) { const d = new DatabaseSync(a, { readOnly: true }); console.log(d.prepare('SELECT COUNT(*) n FROM puzzles').get().n); d.close(); }
     else { console.error('usage: db.mjs backup SRC DST | checkpoint DB | manifest DB | verify DB MANIFEST | stats-eq A B | count DB'); process.exitCode = 2; }
   } catch (e) { console.error(`db ${cmd}: ${e.message}`); process.exitCode = 1; }

@@ -18,7 +18,8 @@
 <body>
 <!-- tinue-handoff: the page's old address (scripts/build-moved.sh). Takes this browser's player, settings and unsent
      results to the new one (the other half: moved/import.js, which says how), and old links with them. It sends them to
-     the one address built into it, never to one it was given. Nothing here is deleted but results the server has. -->
+     the one address built into it, never to one it was given. Nothing here is deleted but results the server has (a tokenless browser id is set
+     aside: below). -->
 <p>tinue is now at <a id="go" href="__NEW__">__NEWNAME__</a>.</p>
 <p id="note" role="status"></p>
 <script src="config.js?v=__V__"></script>
@@ -27,7 +28,7 @@
   const NEW = '__NEW__', V = '__V__', LIMIT = 45000; // bytes of JSON (60 kB of address)
   const ROUTE = /^#\/(?:puzzle\/[A-Za-z0-9_.-]{1,64}(?:\/[0-7])?|me|leaderboard|rush|settings)?$/;
   const part = (k) => new RegExp('[#&]' + k + '=([^&]*)').exec(location.hash)?.[1] ?? '';
-  const pub = part('hn'), asked = /^[A-Za-z0-9_-]{87}$/.test(pub), force = part('f') === '1';
+  const pub = part('hn'), asked = /^[A-Za-z0-9_-]{87}$/.test(pub), only = part('m') === '1', there = part('t'); // (only: brought before; there: a hash of the browser id the new page has)
   let to = location.hash;
   if (/^#h[nsd]=/.test(to)) { try { to = decodeURIComponent(part('to')); } catch { to = ''; } }
   if (!ROUTE.test(to)) to = '#/';
@@ -42,14 +43,17 @@
   const ownerOf = (t) => { if (!t) return ''; let h = 0x811c9dc5; for (const c of t) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193); return (h >>> 0).toString(36); };
   const held = () => { try { return JSON.parse(SS.getItem('tinue.held')); } catch { return null; } };
   const queued = () => { for (let i = 0; i < LS.length; i++) if (LS.key(i).startsWith('tinue.r.')) return true; return false; };
-  const rush = () => { const q = get('rushQueue'); return Array.isArray(q) ? q.filter((x) => x?.body && !(x.snap && Date.now() - x.snap < 120e3)) : []; }; // (a fresh snapshot: another old tab may still be playing it)
+  const rush = () => { const q = get('rushQueue'); return Array.isArray(q) ? q.filter((x) => x?.body && !(x.snap && x.body.abandoned && Date.now() - x.snap < 120e3)) : []; }; // (a run left moments ago: another old tab may be back at it)
   const unsent = () => !!held()?.id || queued() || rush().length > 0;
-  const was = get('moved'), moved = !force && !!was && was.o === ownerOf(token);
-  if (!asked) return leave(moved && !unsent() ? to : '#hs=1&to=' + encodeURIComponent(to));
+  // (whether this player was brought is the new page's to know: it has seen it arrive. o: which player, by the token's hash)
+  if (!asked) return leave('#hs=1&o=' + ownerOf(token) + (unsent() ? '&u=1' : '') + '&to=' + encodeURIComponent(to));
 
   // What the server never got: sent from here first, as the player who played it (the server keeps the first of each, so
   // nothing counts twice). What it doesn't take now goes along and is sent from there.
+  // Not without a token for a browser id the new page has too: the server would give that guest a new token, and the one
+  // there would stop working.
   let results = [];
+  const quiet = !token && !!there && there === ownerOf(get('gidWas') ?? get('gid') ?? '');
   if (unsent()) {
     document.getElementById('note').textContent = 'Sending your last results…';
     const load = Promise.all(['api', 'results', 'playon', 'rush-rules'].map((f) => import(`./${f}.js?v=${V}`)));
@@ -66,10 +70,10 @@
         const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 1500);
         const alive = h.page && navigator.locks ? await navigator.locks.request('tinue.held.' + h.page, { signal: ctl.signal }, () => false).catch((e) => e?.name === 'AbortError').finally(() => clearTimeout(t)) : false;
         const s = P.heldResend(h, owner(), alive);
-        if (s && q.add({ puzzleId: h.id, body: s.body, b: s.build, owner: h.owner, gid: A.token ? null : A.guestId() })) SS.removeItem('tinue.held');
+        if (s && q.add({ puzzleId: h.id, body: s.body, b: s.build, owner: h.owner, gid: A.token ? null : get('gidWas') ?? A.guestId() })) SS.removeItem('tinue.held');
       }
-      await within(q.flush(), 6000);
-      await within((async () => {
+      if (!quiet) await within(q.flush(), 6000);
+      if (!quiet) await within((async () => {
         for (const it of rush()) {
           if (it.who !== R.who(A.token)) continue;
           const r = await A.api('/api/rush/result', it.body, { quiet: true });
@@ -82,7 +86,7 @@
   }
   // A player this browser knows only by the server's cookie (its storage was cleared): the server says who.
   let known = !!token;
-  if (!token && !moved && window.TINUE_API) {
+  if (!token && !only && window.TINUE_API) {
     try {
       const r = await fetch(window.TINUE_API + '/api/handoff-token', { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(3000) });
       const j = r.status === 200 ? await r.json() : null;
@@ -93,24 +97,27 @@
   let left = LIMIT - 200;
   const put = (k, v) => { if (v == null) return false; const s = size(v) + k.length + 4; if (s > left) return false; left -= s; p[k] = v; return true; };
   const putEach = (k, list) => { for (const x of list) { const s = size(x) + 1; if (s <= left) { left -= s; (p[k] ||= []).push(x); } } };
-  if (moved) p.moved = true;
-  put('token', token); put('gid', get('gid'));
+  if (only) p.moved = true;
+  if (known) p.known = true;
+  // Without a token the gid is the guest: one browser id on two origins would have each take the other's token. So it goes
+  // along (kept aside, for a round that fails), and what is played here from now on gets an id of its own.
+  const gid = token ? get('gid') : get('gidWas') ?? get('gid');
+  put('token', token); put('gid', gid);
+  if (!token && gid) try { LS.setItem('tinue.gidWas', JSON.stringify(gid)); LS.removeItem('tinue.gid'); } catch {}
   putEach('results', results);
-  if (!moved) for (const k of ['prefs', 'setUnsent', 'me', 'rush', 'ninjaTransform', 'rushBest', ...(token ? [] : ['guest'])]) put(k, get(k));
+  if (!only) for (const k of ['prefs', 'setUnsent', 'me', 'rush', 'ninjaTransform', 'rushBest', ...(token ? [] : ['guest'])]) put(k, get(k));
   putEach('rushQueue', rush());
-  if (!moved) {
+  if (!only) {
     if (!token) put('seen', get('seen'));
     let hist = get('rushHistory'); // (newest first: as many as fit)
     if (Array.isArray(hist)) { while (hist.length && size(hist) > left - 20) hist = hist.slice(0, hist.length >> 1); if (hist.length) put('rushHistory', hist); }
   }
-  // Brought: from now on only what was never sent is (unless asked for again there). Not when the server didn't answer.
   // (encrypted for the key the new page made: moved/import.js)
   const EC = { name: 'ECDH', namedCurve: 'P-256' }, s = crypto.subtle;
   const pair = await s.generateKey(EC, true, ['deriveKey']), their = await s.importKey('raw', Uint8Array.from(atob(pub.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)), EC, false, []);
   const key = await s.deriveKey({ name: 'ECDH', public: their }, pair.privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
   let bin = '';
   for (const buf of [await s.exportKey('raw', pair.publicKey), await s.encrypt({ name: 'AES-GCM', iv: new Uint8Array(12) }, key, enc.encode(JSON.stringify(p)))]) for (const b of new Uint8Array(buf)) bin += String.fromCharCode(b);
-  if (known && !moved) try { LS.setItem('tinue.moved', JSON.stringify({ t: Date.now(), o: ownerOf(get('token')) })); } catch {}
   leave('#hd=' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') + '&to=' + encodeURIComponent(to));
 })().catch(() => location.replace('__NEW__'));
 </script>

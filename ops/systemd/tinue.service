@@ -2,7 +2,7 @@
 Description=tinue API
 After=network.target
 # the single-writer rule (ops/README.md): no WRITER file, no server on this host
-ConditionPathExists=/var/lib/tinue/WRITER
+ConditionPathExists=/etc/tinue/WRITER
 StartLimitIntervalSec=0
 [Service]
 User=tinue

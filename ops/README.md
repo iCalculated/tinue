@@ -11,14 +11,15 @@ bots and shared links), both proxied A records -> Caddy -> `127.0.0.1:8642` (nod
 | `cloudflare-ranges.txt` | the one list of Cloudflare's ranges, for Caddy and the firewall; a weekly unit fails if Cloudflare's differs |
 | `Caddyfile`, `caddy/`, `site.sh`, `upstream.sh` | the proxy; which names are served; whether they go to node or to the gate |
 | `gate.mjs`, `gate-ctl.sh` | holds requests while the writer changes; in the path only during a move |
-| `backup.mjs` | every 10 minutes, in `/var/lib/tinue-backup`; `--verify` is the restore drill |
+| `backup.mjs` | every 10 minutes, in `/var/lib/tinue-backup`; `--verify` is the restore drill; `sudo sh /srv/tinue/ops/move/ovh.sh restore FILE` puts one in place (node stops for seconds) |
 | `build-syntaks.sh`, `tei-smoke.mjs` | the engine, built on the host |
 | `move/` | the move between crux and the host, both ways |
 | `../scripts/deploy-ovh.sh` | code, env (`/etc/tinue/tinue.env`) and restart |
 
 State is `/var/lib/tinue` (only `tinue` reads it; `/srv/tinue/data` links to it). Code in `/srv/tinue` is root's.
 
-**One writer.** This host runs node only while `/var/lib/tinue/WRITER` exists (systemd checks). A host whose database moved
+**One writer.** This host runs node only while `/etc/tinue/WRITER` exists (root's, so the service can't
+make it; systemd checks). `/etc/tinue/SERVED` says requests have reached it: then only `rollback` takes the database away. A host whose database moved
 away has a `MOVED` file beside it: the server, `import.mjs` and every deploy script refuse there. `move/` is what sets both.
 Never open the live database with the `sqlite3` CLI; use `move/db.mjs` and `backup.mjs`.
 
@@ -73,14 +74,16 @@ From a checkout, with `TINUE_HOST`, `MOVE_DEST=mover@host`, `MOVE_KEY=` crux's k
    one that still comes through it after the next step gets a 502.
 4. `move.sh check`, `move.sh rehearse` twice. Freeze puzzle publishing and imports. Funnel: check crux's log for use first.
 5. `move.sh go`. Requests wait meanwhile, then get their normal answer. If it stops: `go` again goes on, `move.sh abort`
-   goes back. Up to its last step (`pass 8642`) nothing has reached the new node, so abort loses nothing.
+   goes back (both refuse once requests have reached the new host). Up to its last step (`pass 8642`) nothing has reached the new node, so abort loses nothing.
 6. Play one puzzle on each name. `sudo sh /srv/tinue/ops/upstream.sh node` (the gate stays installed); `move.sh hop stop`; on crux
    `crux.sh pull-install` (DEST, KEY, CRUX_RSYNC), then `provision.sh --mover-key … --no-hop` after a week. Funnel off.
 
-Back, with the new host healthy: `move.sh rollback` (hold, fence the new host, crux takes the database back, checks it,
-serves). Every write made since comes along. If the host is down but its disk is alive, wait or mount it: take the db, wal and shm
-together. If it is lost: crux's `~/Projects/tinue-move/pull/good.db` is at most about 20 minutes old; put it in place of the
-fenced database, remove `data/MOVED`, start, and point both names back at the tunnel. Sasha decides between those.
+Back, with the new host healthy: `scripts/deploy-crux.sh --fenced` if anything was deployed since, provision.sh without
+`--no-hop` if that was set, then `move.sh rollback` (hold, fence the new host, crux takes the database back, checks it,
+serves). Every write made since comes along. If it stops, only `rollback` again goes on. If the host is down but its disk is alive, wait or mount it: take the db, wal and shm
+together. If it is lost: crux's `~/Projects/tinue-move/pull/good.db` is at most about 20 minutes old if
+`pull` was well: make sure the host cannot come back serving (off, or rescue and its `WRITER` removed), then on crux
+`crux.sh recover --ovh-is-off`, and point the names back at the tunnel. Sasha decides between those.
 Keep the tunnel and its ingress (add `api.tinue.me` to it, unrouted) for that.
 
 Not covered by the gate: a request through the old tunnel or Funnel while crux is being fenced, and whatever the gate holds

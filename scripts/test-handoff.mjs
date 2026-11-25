@@ -80,6 +80,8 @@ assert.equal(pub(['tinue', 'x'], { PAGES: G }).code, 1, 'a build without CNAME i
 for (const f of fs.readdirSync(G)) if (f !== '.git') fs.rmSync(path.join(G, f), { recursive: true }); fs.cpSync(path.join(B, 'tinue'), G, { recursive: true });
 assert.match(ok(pub(['--dry-run', 'tinue', 'R2'], { PAGES: G })), /\[dry-run\] git -C .* push origin HEAD:site/); assert.equal(git(TIN, 'rev-parse', 'site'), r1);
 ok(pub(['tinue', 'R2'], { PAGES: G })); assert.equal(git(TIN, 'show', 'site:CNAME'), 'tinue.me'); assert.equal(git(TIN, 'ls-tree', '--name-only', 'site', '.nojekyll'), '.nojekyll'); assert.equal(ptr(), r1, 'the pointer stays');
+// from here the everyday publish of the old page is refused: it would take tinue.me's CNAME and 404 page with it
+{ const D0 = path.join(S, 'tinue'), tip = git(TIN, 'rev-parse', 'site'); fs.writeFileSync(path.join(D0, 'x.txt'), 'x'); const x = pub(['tinue', 'old way'], { SITE: S }); assert.equal(x.code, 1); assert.match(x.out, /tinue\.me's own/); assert.equal(git(TIN, 'rev-parse', 'site'), tip); assert.equal(ptr(), r1); fs.rmSync(path.join(D0, 'x.txt')); }
 // the handoff page
 const D = path.join(S, 'tinue'), moved = (args = [], extra = {}) => sh('build-moved.sh', args, { SITE: S, ...extra });
 fs.writeFileSync(path.join(D, 'junk'), 'x'); assert.equal(moved().code, 1); fs.rmSync(path.join(D, 'junk'));

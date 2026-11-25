@@ -41,8 +41,8 @@ const ended = (child) => new Promise((r) => (child.exitCode != null ? r([child.e
 { // a request that never finishes does not hold it past STOP_MS
   const child = await boot(DB), s = net.connect(PORT, '127.0.0.1'); s.on('error', () => {});
   s.write('POST /api/result HTTP/1.1\r\nhost: x\r\ncontent-length: 50\r\n\r\n{'); await wait(200);
-  const t0 = Date.now(); child.kill('SIGTERM'); assert.deepEqual(await ended(child), [0, null]); const ms = Date.now() - t0; assert.ok(ms > 7000 && ms < 10000, ms + ' ms'); s.destroy();
-  console.log('stuck request: ok (stops after 8 s)');
+  const t0 = Date.now(); child.kill('SIGTERM'); assert.deepEqual(await ended(child), [0, null]); const ms = Date.now() - t0; assert.ok(ms > 2000 && ms < 4500, ms + ' ms'); s.destroy();
+  console.log('stuck request: ok (stops after 2.5 s)');
 }
 { // the port is taken: exit 1, not 0
   const s = net.createServer().listen(PORT, '127.0.0.1'); await new Promise((r) => s.once('listening', r));

@@ -19,21 +19,21 @@ echo "deploy: $REV"
 case "$REV" in *'"dirty":true'*) echo "deploy: WARNING the working tree differs from that commit; revision.json records the diff's hash" ;; esac
 if [ -n "$DRY" ]; then echo "[dry-run] write $STATE/revision.json"; else printf '%s\n' "$REV" > "$STATE/revision.json"; fi
 
-STAGE=tinue-stage
+STAGE=tinue-stage LINKS="${TINUE_SITE:-https://tinue.me/}" # (TINUE_SITE: what links in replies name)
 remote "mkdir -p $STAGE"
 push --delete --exclude scripts/archive package.json server shared public scripts ops "$HOST":$STAGE/
 push "$STATE/revision.json" "$HOST":/srv/tinue/deploy/revision.json.new
 # TINUE_ORIGINS: the page, and the old site for open tabs, its handoff page and the beta. TINUE_MOVED_FROM empty: both API
 # names are served here. TINUE_HANDOFF_ORIGIN (POST /api/handoff-token): remove it once the old page's handoff is over.
 remote "set -e
-  MIN_BUILD=$MIN_BUILD; BOOK_VER=$BOOK_VER; JUDGE=$JUDGE; HEALTH_TRIES=30; STAGE=$STAGE"'
+  LINKS=$LINKS; MIN_BUILD=$MIN_BUILD; BOOK_VER=$BOOK_VER; JUDGE=$JUDGE; HEALTH_TRIES=30; STAGE=$STAGE"'
   sudo -n rsync -a --delete --chown=root:root --chmod=D755,Fgo-w,Fa+r --exclude /data --exclude /deploy "$HOME/$STAGE/" /srv/tinue/
   mv /srv/tinue/deploy/revision.json.new /srv/tinue/deploy/revision.json
   sudo -n sh -c "umask 027; cat > /etc/tinue/tinue.env.new; chgrp tinue /etc/tinue/tinue.env.new; mv /etc/tinue/tinue.env.new /etc/tinue/tinue.env" <<ENV
 PORT=8642
 HOST=127.0.0.1
 TINUE_ORIGINS=https://tinue.me,https://shydrie.xyz
-TINUE_SITE=https://tinue.me/
+TINUE_SITE=$LINKS
 TINUE_SECURE=1
 TINUE_MIN_BUILD=$MIN_BUILD
 TINUE_BOOK_VER=$BOOK_VER
@@ -43,8 +43,9 @@ TINUE_MOVED_TO=https://api.tinue.me
 TINUE_SYNTAKS=/opt/syntaks/syntaks
 TINUE_HANDOFF_ORIGIN=https://shydrie.xyz
 ENV
+  W=$(sudo -n sh /srv/tinue/ops/provision.sh --dry-run 2>&1 | grep "provision: write" || true); [ -z "$W" ] || printf "deploy: WARNING not applied yet (run provision.sh on the host):\n%s\n" "$W"
   echo "revision: $(cat /srv/tinue/deploy/revision.json)"
-  if ! sudo -n test -e /var/lib/tinue/WRITER; then echo "deploy: this host has no WRITER file: code and env are in, nothing started"; exit 0; fi
+  if ! sudo -n test -e /etc/tinue/WRITER; then echo "deploy: this host has no WRITER file: code and env are in, nothing started"; exit 0; fi
   sudo -n systemctl restart tinue.service
   sudo -n systemctl restart tinue-players.service # it loads its code once'"$REMOTE_HEALTH"'
   F=$(systemctl --failed --no-legend --plain | cut -d" " -f1); [ -z "$F" ] || echo "deploy: WARNING failed units: $F"'
