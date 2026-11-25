@@ -207,7 +207,7 @@ function renderUser() {
   if (me?.name) {
     // Name with a small menu on hover/focus: History, Sign out (with an inline confirm).
     box.innerHTML = `<div class="menu"><button class="link name" aria-haspopup="true">${esc(me.name)}</button>
-      <div class="pop" role="menu"><a href="#/me" role="menuitem">History</a><a href="#/settings" role="menuitem">Settings</a><button class="link" id="logout" role="menuitem">Sign out</button>
+      <div class="pop" role="menu"><a href="#/me" role="menuitem">History</a><a href="#/settings" role="menuitem">Settings</a>${parkedLine('', ' role="menuitem"')}<button class="link" id="logout" role="menuitem">Sign out</button>
         <div class="confirm hidden" id="logout-confirm"><p>You’ll need your login token (on your History page) to sign back in on this device.</p><button class="danger" id="logout-yes">Sign out</button><p class="err hidden" id="logout-err">Couldn’t sign out: the server didn’t answer.</p></div></div></div>`;
     // (a keyboard press moves focus onto the confirm: the button it pressed hides, and the menu lives on focus)
     $('#logout').onclick = (e) => { $('#logout-err').classList.add('hidden'); $('#logout-confirm').classList.remove('hidden'); $('#logout').classList.add('hidden'); if (!e.detail) $('#logout-yes').focus(); };
@@ -231,7 +231,7 @@ function renderUser() {
         <form id="claim"><label class="field"><span>Username</span><input name="name" id="claim-name" maxlength="20" autocomplete="username" placeholder="2–20 letters, digits, _ or -"></label>
           <button class="primary" type="submit">Claim</button><p class="err hidden" id="claim-err"></p>
           <p class="hint">No password: your browser remembers you. <button type="button" class="link" id="token-open">Have a login token?</button></p>
-          <p class="hint"><a href="#/settings" class="link" id="settings-open">Settings</a></p></form>
+          <p class="hint"><a href="#/settings" class="link" id="settings-open">Settings</a></p>${bringLine()}${parked() ? `<p class="hint">${parkedLine()}</p>` : ''}</form>
         <form id="tok" class="hidden"><label class="field"><span>Login token</span><input name="token" id="tok-in" autocomplete="off" placeholder="From the History page on your other device"></label>
           <button class="primary" type="submit">Sign in</button><p class="err hidden" id="tok-err"></p></form>
       </div></div>`;
@@ -281,6 +281,40 @@ document.addEventListener('click', (e) => { // close the claim popover when clic
   const m = document.querySelector('.menu.click.open');
   if (m && !m.contains(e.target)) closeMenu(m, false);
 });
+// A build for its own domain (config.js TINUE_OLD, the old address): players brought from there (moved/import.js). Two
+// players in one browser are never merged and neither is lost: the one not in use is parked, and the menu switches back.
+const parked = () => { const p = window.TINUE_OLD ? store.get('parked', null) : null; return p && typeof p.token === 'string' && p.token !== token ? p : null; };
+// The current player parked, and the page loaded again as p ({ token, gid, name }, or all the old page sent).
+async function switchTo(p) {
+  await abandonAll({ auth: true });
+  const now = { token, gid: store.get('gid', null), name: me?.name ?? null };
+  if (now.token && now.token !== p.token) store.set('parked', now); else store.del('parked');
+  window.tinueInstall(p); location.reload();
+}
+const bringLine = () => window.TINUE_OLD && !me?.name ? '<p class="hint">Played on shydrie.xyz? <button type="button" class="link" data-bring>Bring your account</button></p>' : '';
+const parkedLine = (cls = '', role = '') => { const p = parked(); return p ? `<button type="button" class="link ${cls}"${role} data-unpark>Switch to ${esc(p.name || 'your other guest')}</button>` : ''; };
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('[data-bring]')) window.tinueBring?.();
+  else if (e.target.closest?.('[data-unpark]')) { const p = parked(); if (p) switchTo(p); }
+});
+// Both origins had a player: the one here stays until this is answered.
+async function askTwo() {
+  let p = null; try { p = JSON.parse(sessionStorage.getItem('tinue.hp')); } catch {}
+  const done = () => { try { sessionStorage.removeItem('tinue.hp'); } catch {} };
+  if (!p || !window.TINUE_OLD || !token || p.token === token) return done();
+  const r = await fetch(API + '/api/me', { headers: { authorization: 'Bearer ' + p.token }, credentials: 'omit' }).then((x) => x.json()).catch(() => null);
+  if (!r) return; // (asked again at the next load)
+  if (!r.user) return done();
+  const label = (u) => u?.name || (u ? `a guest rated ${Math.round(u.rating)}` : 'a guest');
+  const bar = Object.assign(document.createElement('div'), { id: 'two-bar', className: 'build-bar' });
+  bar.setAttribute('role', 'status'); bar.style.flexWrap = 'wrap';
+  const msg = Object.assign(document.createElement('span'), { className: 'msg', textContent: `You have two players: ${label(me)} here, ${label(r.user)} from shydrie.xyz.` });
+  const b = (text, fn) => Object.assign(document.createElement('button'), { type: 'button', textContent: text, onclick: fn });
+  bar.append(msg, b(`Use ${label(r.user)}`, () => { done(); switchTo({ ...p, me: r.user.name ? { name: r.user.name } : null }); }),
+    b(`Keep ${label(me)}`, () => { done(); store.set('parked', { token: p.token, gid: p.gid ?? null, name: r.user.name ?? null }); bar.remove(); renderUser(); fitDock(); }));
+  $('#build-bar')?.before(bar);
+  fitDock();
+}
 // Focus gone into PTN Ninja's frame (a click on its board): no click or key from there reaches the page, so what a click
 // elsewhere or Escape would end here ends now. The claim popover closes, and a move waiting for Confirm keeps the
 // keyboard (Esc cancels, Enter confirms; PTN Ninja's board is off meanwhile). Otherwise Escape stays PTN Ninja's own.
@@ -2751,7 +2785,7 @@ async function mePage() {
   show('view-me');
   const el = $('#view-me');
   const claim = 'Claim a username (top right) to join the leaderboard and sign in on other devices.';
-  if (!me) { el.innerHTML = `<h1>History</h1><div class="panel"><p class="flush">Your puzzles will show up here. ${claim}</p></div>`; return; }
+  if (!me) { el.innerHTML = `<h1>History</h1><div class="panel"><p class="flush">Your puzzles will show up here. ${claim}</p>${bringLine()}</div>`; return; }
   // (me fresh too: another tab may have played since this one loaded, and the chart ends at me.rating)
   const [got, fresh] = await Promise.all([api('/api/history').catch(() => null), api(withBuild('/api/me')).catch(() => null)]);
   if (fresh?.user) { me = fresh.user; renderUser(); settingsArrived(fresh); }
@@ -2853,6 +2887,7 @@ async function route() {
 window.addEventListener('hashchange', route);
 
 (async () => {
+  if (await window.TINUE_WAIT) return; // (tinue.me: the player is being brought from the old address, moved/import.js)
   const cached = store.get('me', null);
   nextQ.resume(); // the puzzle picked after the last result here, if still fresh: the first puzzle needs no request
   if (cached && token) { me = { ...cached, rating: store.get('myRating', PLAYER_START.rating), provisional: store.get('myProv', true), games: 0, wins: 0 }; }
@@ -2861,7 +2896,7 @@ window.addEventListener('hashchange', route);
   renderAll(); // placeholder panels at their final size
   board.load(buildPTN({ size: +(prefs.size || 6) })); // the same board component, empty, until the puzzle arrives
   requestAnimationFrame(() => document.documentElement.classList.remove('booting')); // reveal once laid out
-  const meP = api(withBuild('/api/me')).then((r) => { me = r.user; renderUser(); settingsArrived(r); if (S) renderAll(); }).catch(() => { if (syncState === 'saving') { syncState = 'unsent'; renderSyncStatus(); } });
+  const meP = api(withBuild('/api/me')).then((r) => { me = r.user; renderUser(); settingsArrived(r); if (S) renderAll(); askTwo(); }).catch(() => { if (syncState === 'saving') { syncState = 'unsent'; renderSyncStatus(); } });
   // With a cached account the puzzle request goes out alongside /api/me (the server knows us by the token).
   const flushed = flushHeld(); // before the first puzzle, so the server knows that one was played
   if (flushed) await Promise.race([flushed, new Promise((r) => setTimeout(r, 3000))]);

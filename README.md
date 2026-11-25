@@ -112,6 +112,17 @@ committing.
 - **Roll back the page:** in the site repository, `git revert --no-edit <the pointer commit> && git push`, then
   `git submodule update tinue`. The next publish builds on the tip of `site` whatever the pointer says.
 
+### tinue.me
+
+`DOMAIN=tinue.me` makes `scripts/build-static.sh` build for its own domain (API at api.tinue.me, `CNAME`, `404.html`); without
+it nothing changes. `PAGES=$SITE/tinue sh scripts/publish-site.sh tinue` pushes that build to branch `site`, which GitHub
+Pages serves itself. The old address then gets the handoff page: `scripts/build-moved.sh` on the last build made for it,
+and `publish-site.sh tinue-moved` (branch `moved`, then the pointer). It brings a visitor's player, settings and unsent
+results to the new address once, encrypted for a one-use key the new page makes (`moved/import.js` says how), and forwards
+old links. Tests: `scripts/test-handoff.mjs`, and `scripts/e2e-handoff.mjs` in headless Chrome. The server's side: `ops/README.md`.
+
+Results wait in the browser until the server has them (`public/results.js`).
+
 ### Puzzle format
 
 ```json

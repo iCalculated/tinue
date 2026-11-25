@@ -11,6 +11,10 @@
 #   --dry-run    check the inputs, print every destructive step, write nothing (also DRY_RUN=1)
 #   --all-stubs  rewrite every puzzle page (also STUBS=all); by default the old puzzle/ is kept across the build and
 #                only pages whose content changed are rewritten (scripts/build-stubs.mjs): the same output, fewer writes
+#   DOMAIN=tinue.me  the build for its own domain instead of shydrie.xyz/tinue/ (off by default): the page's address is
+#                    https://$DOMAIN/ and the API https://api.$DOMAIN, the page takes players over from the old address
+#                    (moved/import.js; OLD_URL, default https://shydrie.xyz/tinue/), and CNAME, .nojekyll and 404.html are
+#                    written. Published with PAGES=$SITE/tinue scripts/publish-site.sh tinue.
 #   API default: https://tinue-api.shydrie.xyz (crux through Cloudflare Tunnel). Every puzzle page's og:image is built
 #   from it too, so a build with another API rewrites all of them.
 #   Rollback to the Funnel: SITE=$HOME/Projects/site sh scripts/build-static.sh https://crux.tail5ed24.ts.net:8443
@@ -26,8 +30,13 @@ export STUBS
 DB="${TINUE_DB:-data/tinue.db}" # the puzzle pages' source (build-stubs.mjs reads the same TINUE_DB)
 NAME="${NAME:-tinue}"
 case "$NAME" in ''|*/*|.*) echo "build-static: NAME must be a plain directory name" >&2; exit 2 ;; esac
+if [ -n "$DOMAIN" ]; then
+  case "$DOMAIN" in *[!a-z0-9.-]*|-*|.*) echo "build-static: DOMAIN must be a plain host name" >&2; exit 2 ;; esac
+  [ -z "$BETA" ] && [ "$STUBS" != none ] || { echo "build-static: DOMAIN is the production build (no BETA, no STUBS=none)" >&2; exit 2; }
+  SITE_URL="${SITE_URL:-https://$DOMAIN/}"; OLD_URL="${OLD_URL:-https://shydrie.xyz/tinue/}"
+fi
 SITE_URL="${SITE_URL:-https://shydrie.xyz/$NAME/}"
-API="${1:-https://tinue-api.shydrie.xyz}"
+API="${1:-https://${DOMAIN:+api.$DOMAIN}}"; [ "$API" != https:// ] || API=https://tinue-api.shydrie.xyz
 if [ -z "$SITE" ]; then
   echo "build-static: set SITE (SITE=\$HOME/Projects/site for a deploy, or a scratch dir for a test build)" >&2; exit 2
 fi
@@ -38,6 +47,7 @@ if [ -n "$DRY" ]; then
   echo "[dry-run] lock $SITE/.tinue-build.lock"
   [ "$STUBS" = all ] || [ ! -d "$OUT/puzzle" ] || echo "[dry-run] mv $OUT/puzzle $SITE/.tinue-stubs-keep (kept across the rebuild)"
   echo "[dry-run] rm -rf $OUT (all but .git); copy public/, shared/, tiltak/, syntaks/ into it; sed -i the ENGINE hash, preconnect and ?v= stamps"
+  [ -z "$DOMAIN" ] || echo "[dry-run] for $SITE_URL: moved/import.js (from $OLD_URL) into $OUT/index.html; write CNAME ($DOMAIN), .nojekyll, 404.html"
   echo "[dry-run] write $OUT/config.js (API $API, analysis view $([ "${ANALYSIS:-0}" = 1 ] && echo on || echo off)), $OUT/version.json"
   [ "$STUBS" = none ] && { echo "[dry-run] no puzzle pages (STUBS=none)"; exit 0; }
   [ "$STUBS" = all ] || [ ! -d "$OUT/puzzle" ] || echo "[dry-run] mv $SITE/.tinue-stubs-keep $OUT/puzzle"
@@ -103,6 +113,19 @@ if [ "${ANALYSIS:-0}" = 1 ]; then printf "window.TINUE_ANALYSIS = true;\n" >> "$
 if [ -n "$BETA" ]; then
   printf "window.TINUE_BETA = '%s';\n" "$(printf %s "$BETA" | tr -cd 'A-Za-z0-9@._/ -')" >> "$OUT/config.js"
   sed -i '' -E 's#(<link rel="icon")#<meta name="robots" content="noindex">\1#' "$OUT/index.html"
+fi
+# Its own domain: the address in the page's tags and links, the import of players from the old address (first in <head>,
+# inline: it takes the payload off the address before anything else runs), and what GitHub Pages needs.
+if [ -n "$DOMAIN" ]; then
+  printf "window.TINUE_OLD = '%s';\n" "$OLD_URL" >> "$OUT/config.js"
+  DOMAIN="$DOMAIN" SITE_URL="$SITE_URL" OLD_URL="$OLD_URL" node -e "
+    const fs = require('fs'), out = process.argv[1], { DOMAIN, SITE_URL, OLD_URL } = process.env;
+    const js = fs.readFileSync('moved/import.js', 'utf8').replaceAll('__OLD__', OLD_URL);
+    const html = fs.readFileSync(out + '/index.html', 'utf8').replaceAll('https://shydrie.xyz/tinue/', SITE_URL), at = '<meta charset=\"utf-8\">\n';
+    if (html.split(at).length !== 2 || js.includes('</script')) throw new Error('index.html has no place for moved/import.js');
+    fs.writeFileSync(out + '/index.html', html.replace(at, () => at + '<script>\n' + js + '</script>\n'));
+    fs.copyFileSync('moved/404.html', out + '/404.html');
+    fs.writeFileSync(out + '/CNAME', DOMAIN + '\n'); fs.writeFileSync(out + '/.nojekyll', '');" "$OUT"
 fi
 # Every local .js/.css href/src in index.html (styles, scripts, modulepreloads); absolute and data: URLs are skipped.
 sed -i '' -E "s#(href|src)=\"([A-Za-z0-9_./-]+\.(js|css))\"#\1=\"\2?v=$V\"#g" "$OUT/index.html"

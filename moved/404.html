@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<title>tinue</title>
+<script>
+// GitHub Pages' page for an address it has no file for: a puzzle added since the last build, or an address of the old
+// site (/tinue/…). Only ever to this site, only to a page it knows.
+(function () {
+  var p = location.pathname.replace(/^\/tinue(?=\/|$)/, ''), m = /^\/puzzle\/([A-Za-z0-9_.-]{1,64}?)(?:\.html)?\/?$/.exec(p);
+  var h = /^#\/(?:puzzle\/[A-Za-z0-9_.-]{1,64}(?:\/[0-7])?|me|leaderboard|rush|settings)$/.test(location.hash) ? location.hash : '#/';
+  location.replace('/' + (m ? '#/puzzle/' + m[1] : h));
+})();
+</script>
+</head>
+<body><p><a href="/">tinue</a></p></body>
+</html>

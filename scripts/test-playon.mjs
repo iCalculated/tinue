@@ -173,7 +173,7 @@ test('leftRunsOn: only an out under the Tak rule whose check still runs keeps ru
   const ab = app.slice(app.indexOf('function abandonCheck('), app.indexOf('function abandonQuick('));
   assert.ok(ab.indexOf('leftRunsOn(') > 0 && ab.indexOf('leftRunsOn(') < ab.indexOf('.chk.cancel()'), 'abandonCheck asks leftRunsOn before cancelling');
   assert.match(app, /addEventListener\('pagehide', \(\) => \{ abandonAll\(\{ keepalive: true \}\)/);
-  assert.equal((app.match(/await abandonAll\(\{ auth: true \}\)/g) || []).length, 2, 'log-out and log-in');
+  assert.equal((app.match(/await abandonAll\(\{ auth: true \}\)/g) || []).length, 3, 'log-out, log-in and switching players');
   assert.match(app, /runningOn\.delete\(s\)/);
   assert.match(app, /if \(r\.p\.id === p\.id\) abandonCheck\(r, \{ again: true \}\)/, 'the same puzzle opened again settles the old attempt first');
   assert.match(COPY['end.note.checking'], /switching puzzles is safe/i); assert.match(COPY['end.note.checking'], /reload/i);
