@@ -177,7 +177,7 @@
 <body>
 <main>
   <header>
-    <h1><a href="https://shydrie.xyz/tinue/" title="tinue, the Tak puzzle trainer">tinue</a> players</h1>
+    <h1><a href="https://tinue.me/" title="tinue, the Tak puzzle trainer">tinue</a> players</h1>
     <span id="status"><i></i><span>loading…</span></span>
   </header>
 
@@ -306,7 +306,7 @@ const midnight = (t = Date.now()) => { const d = new Date(t); d.setHours(0, 0, 0
 const when = (t) => (t >= midnight() ? clock(t) : `${dayOf(t)}, ${clock(t)}`);
 const ago = (ms) => (ms < 60e3 ? 'just now' : ms < HOUR ? `${R(ms / MIN)} min ago` : ms < DAY ? `${R(ms / HOUR)} h ago` : `${R(ms / DAY)} d ago`);
 const short = (p) => p.replace(/^guest /, 'g:');
-const puzzleUrl = (id) => `https://shydrie.xyz/tinue/puzzle/${id}`;
+const puzzleUrl = (id) => `https://tinue.me/puzzle/${id}`;
 const board = (n) => (n ? `${n}×${n}` : '–'); // a puzzle missing from the puzzles table has no size
 
 function nice(lo, hi, n) {

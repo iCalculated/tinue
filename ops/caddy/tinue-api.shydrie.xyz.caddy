@@ -1,0 +1,4 @@
+tinue-api.shydrie.xyz {
+	import tls
+	import upstream
+}

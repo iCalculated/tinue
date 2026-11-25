@@ -1,0 +1,23 @@
+[Unit]
+Description=tinue players page
+After=tinue.service
+ConditionPathExists=/var/lib/tinue/WRITER
+StartLimitIntervalSec=0
+[Service]
+User=tinue
+Group=tinue
+WorkingDirectory=/srv/tinue
+Environment=HOST=127.0.0.1 PORT=8792
+ExecStart=/usr/local/bin/node --no-warnings scripts/players-live/server.mjs
+Restart=always
+RestartSec=5
+SuccessExitStatus=143
+UMask=0077
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tinue
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+[Install]
+WantedBy=multi-user.target

@@ -572,6 +572,12 @@ try {
     assert.match((await raw('/api/logout', { body: {} })).headers.get('set-cookie'), /^tinue_token=; .*Max-Age=0/);
   });
 
+  // POST /api/handoff-token is off unless TINUE_HANDOFF_ORIGIN is set (on: scripts/test-hosts.mjs)
+  await test('handoff-token: no such route by default', async () => {
+    const r = await fetch(base + '/api/handoff-token', { method: 'POST', headers: { origin: 'https://shydrie.xyz', cookie: 'tinue_token=' + token } });
+    assert.equal(r.status, 404);
+  });
+
   // POST /api/slow: one SLOW-CLIENT access-log line per report. The leading fields keep their order (an old client's
   // body logs as before); new fields are short key=value tokens, only when well-formed; the IP and other headers never.
   await test('slow reports: old and new shapes, user tag, cf headers, hostile values, batches capped and rate-limited', async () => {
@@ -644,7 +650,7 @@ try {
 
   // The old Funnel host: apps, bots and typed links are redirected to the new host; a page's fetch is still answered.
   await test('the old host redirects apps, bots and navigations, and still answers a page\'s fetch', async () => {
-    const OLD = 'crux.tail5ed24.ts.net:8443', NEW = 'https://tinue-api.shydrie.xyz';
+    const OLD = 'crux.tail5ed24.ts.net:8443', NEW = 'https://api.tinue.me';
     const raw = (p, headers = {}, method = 'GET', body) => new Promise((resolve, reject) => {
       const r = http.request({ host: '127.0.0.1', port: PORT, path: p, method, headers: { host: OLD, ...(body ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } : {}), ...headers } }, (res) => {
         let s = ''; res.on('data', (d) => (s += d)); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text: s }));

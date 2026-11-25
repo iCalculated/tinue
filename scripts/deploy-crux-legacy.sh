@@ -9,6 +9,7 @@
 # Ships code + a puzzle export; crux upserts puzzles into its own DB, so players' ratings survive redeploys.
 set -e
 cd "$(dirname "$0")/.."
+unset TINUE_HOST # this script means crux, whatever the shell says
 . scripts/deploy-lib.sh
 RS=; [ -n "$DRY" ] && { SSH="echo [dry-run] $SSH"; RS="echo [dry-run]"; }
 # 1. export public puzzles (PlayTak-derived; never the local-only Ditaktic set), history baked into meta,
@@ -26,7 +27,7 @@ let n=0; for (const r of d.prepare(\"SELECT * FROM puzzles WHERE source NOT LIKE
 out.end(()=>console.log('exported',n,'puzzles'));"
 gzip -kf "$EXP/puzzles.jsonl"
 # 2. ship code + export (small files; crux drops long streams, so keep it chunky and verifiable)
-$SSH "$HOST" 'mkdir -p ~/Projects/tinue/data ~/Projects/tinue/deploy/puzzles ~/Library/Logs'
+$SSH "$HOST" "$UNFENCED"'; mkdir -p ~/Projects/tinue/data ~/Projects/tinue/deploy/puzzles ~/Library/Logs'
 # dev/ (test harness pages) and scripts/archive/ (one-offs) are never shipped.
 $RS rsync -az --timeout=300 -e "$SSH" --exclude scripts/archive package.json server shared public scripts "$HOST":Projects/tinue/
 $RS rsync -az --timeout=300 -e "$SSH" "$EXP/puzzles.jsonl.gz" "$HOST":Projects/tinue/deploy/puzzles/
@@ -48,7 +49,7 @@ $SSH "$HOST" 'set -e; cd ~/Projects/tinue
   <key>Label</key><string>com.shy.tinue</string>
   <key>ProgramArguments</key><array><string>/opt/homebrew/bin/node</string><string>--no-warnings</string><string>server/server.js</string></array>
   <key>WorkingDirectory</key><string>$HOME/Projects/tinue</string>
-  <key>EnvironmentVariables</key><dict><key>PORT</key><string>8642</string><key>HOST</key><string>127.0.0.1</string><key>TINUE_ORIGINS</key><string>https://shydrie.xyz</string><key>TINUE_SECURE</key><string>1</string><key>TINUE_MIN_BUILD</key><string>$MIN_BUILD</string><key>TINUE_BOOK_VER</key><string>$BOOK_VER</string><key>TINUE_JUDGE</key><string>$JUDGE</string></dict>
+  <key>EnvironmentVariables</key><dict><key>PORT</key><string>8642</string><key>HOST</key><string>127.0.0.1</string><key>TINUE_ORIGINS</key><string>https://tinue.me,https://shydrie.xyz</string><key>TINUE_SITE</key><string>https://shydrie.xyz/tinue/</string><key>TINUE_MOVED_TO</key><string>https://tinue-api.shydrie.xyz</string><key>TINUE_SECURE</key><string>1</string><key>TINUE_MIN_BUILD</key><string>$MIN_BUILD</string><key>TINUE_BOOK_VER</key><string>$BOOK_VER</string><key>TINUE_JUDGE</key><string>$JUDGE</string></dict>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
   <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>$HOME/Library/Logs/tinue.log</string><key>StandardErrorPath</key><string>$HOME/Library/Logs/tinue.log</string>

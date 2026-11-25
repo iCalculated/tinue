@@ -1,0 +1,14 @@
+[Unit]
+Description=tinue database backup
+ConditionPathExists=/var/lib/tinue/WRITER
+[Service]
+Type=oneshot
+User=tinue
+Group=tinue
+ExecStart=/usr/local/bin/node --no-warnings /srv/tinue/ops/backup.mjs
+UMask=0027
+Nice=10
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tinue /var/lib/tinue-backup
+NoNewPrivileges=yes
+ProtectHome=yes

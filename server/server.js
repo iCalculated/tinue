@@ -27,9 +27,15 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = +(process.env.PORT || 8642);
 const DB_PATH = process.env.TINUE_DB || path.join(ROOT, 'data', 'tinue.db');
 // The oldest client build (build-static.sh's stamp, sent as ?b= on /api/result) whose misses are still rated; 0 = any.
-// Set by scripts/deploy-crux.sh. Raise it there when a client fix changes what counts as a miss.
+// Set by the deploy scripts (scripts/deploy-lib.sh). Raise it there when a client fix changes what counts as a miss.
 const MIN_MISS_BUILD = +process.env.TINUE_MIN_BUILD || 0;
 
+// A host whose database has moved to another one (ops/README.md) keeps a MOVED file beside it and must never write it
+// again: two writers would mean lost or doubled results. Scripts that import this file (import.mjs) stop here too.
+if (DB_PATH !== ':memory:' && fs.existsSync(path.join(path.dirname(DB_PATH), 'MOVED'))) {
+  console.error('tinue: this host was fenced (data/MOVED): its database lives on another host now; not starting');
+  process.exit(1);
+}
 export const db = new DatabaseSync(DB_PATH);
 // Wait up to BUSY_MS for another process's write lock (scripts/import.mjs, a hand fix) instead of failing at once: a
 // result that arrived during an import's transaction got a 500 and was lost. checkpoint() sets it to 0 around itself.
@@ -157,16 +163,17 @@ const ownSettings = (u) => (u ? readSettings(settingsById.get(u.id)?.settings) :
 // A player as anyone may see them (leaderboard-level data).
 const profile = (u) => ({ name: u.name, rating: Math.round(u.rating), rd: Math.floor(u.rd), provisional: provisional(u), games: u.games, wins: u.wins });
 // Where the page lives, for links in bot replies.
-const SITE = process.env.TINUE_SITE || 'https://shydrie.xyz/tinue/';
+const SITE = process.env.TINUE_SITE || 'https://tinue.me/';
 
-// The API moved from Tailscale Funnel to Cloudflare Tunnel on 2026-11-16. A request that still names the old host and
-// is not a page's fetch (an app, a bot, a crawler, a typed or shared link) is sent to the same path on the new host:
+// A host name the API has left (TINUE_MOVED_FROM; the Tailscale Funnel's, since 2026-11-16). tinue-api.shydrie.xyz never
+// belongs there: it is served beside api.tinue.me for open tabs, bots and shared links. A request that still names such
+// a host and is not a page's fetch (an app, a bot, a crawler, a typed or shared link) is sent to the same path on the new host:
 // 301 for GET and HEAD, 308 for anything else so the method and body are kept. A page's fetch is still answered here:
 // a CORS request redirected to another origin arrives there with Origin "null", and a preflight can't be redirected at
 // all, so redirecting an open tab on an old build would break it rather than move it (those tabs update themselves
 // through version.json). Browsers mark their fetches with Origin or a sec-fetch-mode other than "navigate".
 const MOVED_FROM = new Set((process.env.TINUE_MOVED_FROM ?? 'crux.tail5ed24.ts.net:8443,crux.tail5ed24.ts.net').split(',').filter(Boolean));
-const MOVED_TO = (process.env.TINUE_MOVED_TO || 'https://tinue-api.shydrie.xyz').replace(/\/+$/, '');
+const MOVED_TO = (process.env.TINUE_MOVED_TO || 'https://api.tinue.me').replace(/\/+$/, '');
 function moved(req, res, url) {
   if (!MOVED_FROM.has(String(req.headers.host || '').toLowerCase())) return false;
   const mode = req.headers['sec-fetch-mode'];
@@ -182,9 +189,10 @@ function moved(req, res, url) {
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const now = () => Date.now();
 
-// Token from `Authorization: Bearer …` (the page on shydrie.xyz) or the cookie. The cookie only counts when the request
+// Token from `Authorization: Bearer …` (the page) or the cookie. The cookie only counts when the request
 // comes from an allowed origin, the API host itself, or no browser page at all (no Origin header): on
-// tinue-api.shydrie.xyz it is same-site with every *.shydrie.xyz page (pages.shydrie.xyz hosts one-off HTML), and a
+// tinue-api.shydrie.xyz it is same-site with every *.shydrie.xyz page (pages.shydrie.xyz hosts one-off HTML; on
+// api.tinue.me with anything under tinue.me), and a
 // SameSite=Lax cookie rides along on their fetches, so without this check such a page could post results as the
 // player. CORS hides the reply from that page but doesn't stop the write. cookie() applies the same check before
 // setting or clearing the cookie, which is what stops such a page logging a player out or in.
@@ -223,8 +231,8 @@ function newGuest(gidIn, name = null) {
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
-// Origins allowed to call the API from a browser (the static page on shydrie.xyz, plus local dev).
-const ORIGINS = new Set((process.env.TINUE_ORIGINS || 'https://shydrie.xyz,http://localhost:8642,http://localhost:8650').split(','));
+// Origins allowed to call the API from a browser (the static page: tinue.me, and shydrie.xyz for old tabs and the beta; plus local dev).
+const ORIGINS = new Set((process.env.TINUE_ORIGINS || 'https://tinue.me,https://shydrie.xyz,http://localhost:8642,http://localhost:8650').split(','));
 function cors(req, res) {
   const o = req.headers.origin;
   if (o && ORIGINS.has(o)) {
@@ -238,6 +246,12 @@ function cors(req, res) {
     res.setHeader('vary', 'origin');
   }
 }
+
+// The old page on shydrie.xyz hands its player over to tinue.me with the token in its localStorage. A player whose token
+// is only in the HttpOnly cookie has none there to hand over, so that one origin may ask for it (POST /api/handoff-token).
+// Unset (the default): no such route. Temporary: switched off once the old page is gone.
+const HANDOFF_ORIGIN = process.env.TINUE_HANDOFF_ORIGIN || '';
+const HANDOFF_FAILS = 10;
 
 const publicPuzzle = (p) => p && ({
   id: p.id, size: p.size, tps: p.tps, plies: p.plies, tree: JSON.parse(p.tree),
@@ -365,7 +379,7 @@ GET /api/users/NAME          -> { user: { name, rating, rd, provisional, games, 
 GET /api/users?names=a,b,c   -> { users: [...], missing: [...] }
 GET /api/leaderboard         -> { leaders: [{ name, rating, games, wins, provisional }] }   (top 50 named players with a rated puzzle)
 
-Example chat post: "Puzzle of the day (2331, white to play): https://shydrie.xyz/tinue/#/puzzle/pd626152"
+Example chat post: "Puzzle of the day (2331, white to play): ${SITE}#/puzzle/pd626152"
 Solving it on the site is rated as usual, signed in or as a guest (first try only; a hint makes it unrated).
 `;
 
@@ -428,14 +442,13 @@ async function body(req) {
   return o;
 }
 
-// Per-key fixed-window rate limits, in memory. The API is reached through two proxies at once, and behind both every
-// request comes from 127.0.0.1, so the client address comes from x-forwarded-for:
-//   Tailscale Funnel (crux.tail5ed24.ts.net:8443): tailscaled's httputil.ReverseProxy REPLACES the header with the one
-//     address it saw.
-//   Cloudflare Tunnel (tinue-api.shydrie.xyz): Cloudflare APPENDS the client address after whatever x-forwarded-for the
-//     client sent, and cloudflared passes it on.
-// The last non-empty entry is the proxy's own on both paths, so a client can't pick its key. Don't trust
-// cf-connecting-ip: the Funnel path passes it through untouched, so a client could forge it there.
+// Per-key fixed-window rate limits, in memory. Behind a proxy every request comes from 127.0.0.1, so the client address
+// comes from x-forwarded-for, whose last non-empty entry is the proxy's own:
+//   Caddy (ops/Caddyfile) REPLACES the header with the one address Cloudflare named (CF-Connecting-IP, believed only from
+//     Cloudflare's ranges).
+//   Cloudflare Tunnel (crux) APPENDS the client address after whatever x-forwarded-for the client sent; Tailscale Funnel
+//     (crux) replaces it.
+// So a client can't pick its key. Don't read cf-connecting-ip here: not every path in strips a forged one.
 // IPv6 clients (Cloudflare serves IPv6) are keyed by their /64: usually one household or LAN, like an IPv4 NAT
 // address, and one client can rotate freely within it, so a narrower key would be no limit at all. An IPv4-mapped
 // address (::ffff:a.b.c.d) is keyed as the IPv4 address.
@@ -467,9 +480,8 @@ const tooMany = (res, wait) => json(res, 429, { error: 'Too many requests. Try a
 // Over the limit: answer 429 with the wait, true.
 const refuse = (res, ...limit) => { const wait = limited(...limit); if (wait) tooMany(res, wait); return !!wait; };
 
-// Secure cookie when served over HTTPS (Funnel and Cloudflare both set x-forwarded-proto: https) or when told to
-// (TINUE_SECURE=1 on crux). No Domain attribute: the cookie is host-only, so the Funnel and Cloudflare hosts each keep
-// their own and neither reaches shydrie.xyz. Returned as a headers object, and empty unless cookieOk (see userFrom): a
+// Secure cookie when served over HTTPS (the proxies set x-forwarded-proto: https) or when told to (TINUE_SECURE=1). No
+// Domain attribute: the cookie is host-only, so each API name keeps its own and none reaches the page's host. Returned as a headers object, and empty unless cookieOk (see userFrom): a
 // page on another *.shydrie.xyz host can't plant a token (login CSRF) or clear one. The token is still in the JSON.
 const cookie = (req, v, age) => cookieOk(req) ? { 'set-cookie': `tinue_token=${v}; Path=/; Max-Age=${age}; SameSite=Lax; HttpOnly` +
   (process.env.TINUE_SECURE || req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '') } : {};
@@ -631,6 +643,18 @@ async function api(req, res, url) {
       hit(key); return json(res, 401, { error: 'Unknown token.' });
     }
     return json(res, 200, { user: publicUser(u), settings: ownSettings(u) }, cookie(req, token, SESSION_AGE));
+  }
+
+  // The caller's own cookie token, as JSON, for the old page's handoff (HANDOFF_ORIGIN). Only that exact origin, only from
+  // the cookie (a page with a bearer token has nothing to ask), never logged or cached. Failures are limited per client.
+  if (HANDOFF_ORIGIN && route === 'POST /api/handoff-token' && req.headers.origin === HANDOFF_ORIGIN) {
+    const t = req.headers.authorization ? null : /(?:^|;\s*)tinue_token=([a-f0-9]{48})(?:;|$)/.exec(req.headers.cookie || '')?.[1];
+    if (!t || !db.prepare('SELECT 1 FROM users WHERE token_hash = ?').get(sha(t))) {
+      const key = 'handoff:' + ip(req);
+      if (refuse(res, key, HANDOFF_FAILS, 3600e3, false)) return;
+      hit(key); return json(res, 401, { error: 'none' }, { 'cache-control': 'no-store' });
+    }
+    return json(res, 200, { token: t }, { 'cache-control': 'no-store' });
   }
 
   if (route === 'POST /api/logout') return json(res, 200, {}, cookie(req, '', 0));
@@ -868,7 +892,9 @@ function logLine(line) {
 process.on('unhandledRejection', (e) => console.error('unhandled rejection', e));
 process.on('uncaughtException', (e) => console.error('uncaught exception', e));
 
+let stopping = false; // SIGTERM came (shutdown below)
 const server = http.createServer(async (req, res) => {
+  if (stopping) res.setHeader('connection', 'close');
   const t0 = process.hrtime.bigint();
   res.on('finish', () => {
     const ms = Number(process.hrtime.bigint() - t0) / 1e6;
@@ -893,7 +919,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 // Keep idle connections open longer than the proxies in front keep theirs (cloudflared pools origin connections for
-// up to 90 s). With Node's 5 s default, a proxy can reuse a socket the server has just closed and, for a POST it won't
+// up to 90 s, Caddy for 60 s). With Node's 5 s default, a proxy can reuse a socket the server has just closed and, for a POST it won't
 // retry, answer the player with a 502.
 server.keepAliveTimeout = 120e3;
 server.headersTimeout = 125e3;
@@ -915,7 +941,31 @@ function checkpoint() {
   } catch (e) { console.error('checkpoint', e.message); } finally { db.exec(`PRAGMA busy_timeout = ${BUSY_MS}`); }
 }
 
+// SIGTERM (a restart, or the move to another host): take no new connections, finish the requests under way (at most
+// STOP_MS), empty the WAL into the database, exit 0. A result being written is answered, not cut off.
+const STOP_MS = 8000;
+function shutdown() {
+  if (stopping) return;
+  stopping = true;
+  let done = false;
+  const end = () => {
+    if (done) return;
+    done = true;
+    setTimeout(() => { // the last access-log lines are written asynchronously
+      checkpoint();
+      try { db.close(); } catch (e) { console.error('close', e.message); }
+      console.log('tinue stopped');
+      process.exit(0);
+    }, 50);
+  };
+  server.close(end);
+  setInterval(() => server.closeIdleConnections(), 50);
+  setTimeout(end, STOP_MS);
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.on('SIGTERM', shutdown);
+  server.on('error', (e) => { console.error(e); if (!server.listening) process.exit(1); }); // can't listen (the port is taken): not a success, and not for uncaughtException to swallow
   console.log(`attempts: ${attemptDups} duplicate (user_id, puzzle_id) pair${attemptDups === 1 ? '' : 's'}`);
   checkpoint();
   setInterval(checkpoint, CHECKPOINT_MS).unref();

@@ -1,0 +1,7 @@
+[Unit]
+Description=weekly check of Cloudflare's range list
+[Timer]
+OnCalendar=Mon 17:00
+Persistent=yes
+[Install]
+WantedBy=timers.target

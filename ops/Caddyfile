@@ -1,0 +1,38 @@
+# Installed as /etc/caddy/Caddyfile by provision.sh. Beside it: cf-ranges.caddy (from cloudflare-ranges.txt),
+# upstream.caddy (gate or node: upstream.sh writes it) and sites/*.caddy (one per public name, enabled by site.sh).
+# node is told one client address: Cloudflare's CF-Connecting-IP, believed only from Cloudflare's ranges; whatever
+# X-Forwarded-For came in is replaced. Retries stay off: the gate does the waiting (ops/gate.mjs).
+{
+	servers {
+		import cf-ranges.caddy
+		client_ip_headers CF-Connecting-IP
+	}
+	grace_period 10s
+}
+
+(tls) {
+	# Let's Encrypt by HTTP-01, which comes through Cloudflare's proxy on port 80. TLS-ALPN cannot (Cloudflare ends TLS).
+	# A Cloudflare Origin CA certificate instead: put it at /etc/caddy/certs/<name>.pem and .key and use (see README)
+	#   tls /etc/caddy/certs/<name>.pem /etc/caddy/certs/<name>.key
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+}
+
+(proxy) {
+	request_body {
+		max_size 2MB
+	}
+	reverse_proxy {args[0]} {
+		header_up X-Forwarded-For {client_ip}
+		header_up X-Forwarded-Proto https
+		transport http {
+			keepalive 60s
+		}
+	}
+}
+
+import upstream.caddy
+import sites/*.caddy

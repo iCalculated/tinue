@@ -1,5 +1,6 @@
 #!/bin/sh
-# Deploy the API server's CODE to crux (Mac mini on the tailnet) and wait until it answers. Puzzles are content and go
+# Deploy the API server's CODE to crux (Mac mini on the tailnet) and wait until it answers. Refused once crux is fenced
+# (the API has moved: scripts/deploy-ovh.sh). Puzzles are content and go
 # separately (scripts/publish-puzzles.sh); this never writes a puzzle row. Client and API together: scripts/ship.sh.
 # Players reach the API two ways: Cloudflare Tunnel at https://tinue-api.shydrie.xyz (primary; cloudflared is its own
 # service on crux, never touched here) and Tailscale Funnel at https://crux.tail5ed24.ts.net:8443 (kept for old builds,
@@ -18,6 +19,7 @@ for a in "$@"; do case "$a" in
   *) echo "deploy-crux: unknown option $a (usage: scripts/deploy-crux.sh [--dry-run] [--legacy])" >&2; exit 2 ;;
 esac; done
 [ -n "$shift_legacy" ] && exec sh scripts/deploy-crux-legacy.sh "$@"
+unset TINUE_HOST # this script means crux, whatever the shell says
 . scripts/deploy-lib.sh
 
 # 1. the revision being shipped, so the server's deploy/revision.json (and batch outputs, bug reports) can name the code
@@ -28,7 +30,7 @@ case "$REV" in *'"dirty":true'*) echo "deploy: WARNING the working tree differs 
 if [ -n "$DRY" ]; then echo "[dry-run] write $STATE/revision.json"; else printf '%s\n' "$REV" > "$STATE/revision.json"; fi
 
 # 2. ship code (dev/ test pages and scripts/archive/ one-offs never go). No puzzle export, no import.
-remote 'mkdir -p ~/Projects/tinue/data ~/Projects/tinue/deploy ~/Library/Logs'
+remote "$UNFENCED"'; mkdir -p ~/Projects/tinue/data ~/Projects/tinue/deploy ~/Library/Logs'
 push --exclude scripts/archive package.json server shared public scripts "$HOST":Projects/tinue/
 push "$STATE/revision.json" "$HOST":Projects/tinue/deploy/revision.json
 
@@ -43,7 +45,7 @@ remote "set -e; cd ~/Projects/tinue
   <key>Label</key><string>com.shy.tinue</string>
   <key>ProgramArguments</key><array><string>$NODE</string><string>--no-warnings</string><string>server/server.js</string></array>
   <key>WorkingDirectory</key><string>$HOME/Projects/tinue</string>
-  <key>EnvironmentVariables</key><dict><key>PORT</key><string>8642</string><key>HOST</key><string>127.0.0.1</string><key>TINUE_ORIGINS</key><string>https://shydrie.xyz</string><key>TINUE_SECURE</key><string>1</string><key>TINUE_MIN_BUILD</key><string>$MIN_BUILD</string><key>TINUE_BOOK_VER</key><string>$BOOK_VER</string><key>TINUE_JUDGE</key><string>$JUDGE</string></dict>
+  <key>EnvironmentVariables</key><dict><key>PORT</key><string>8642</string><key>HOST</key><string>127.0.0.1</string><key>TINUE_ORIGINS</key><string>https://tinue.me,https://shydrie.xyz</string><key>TINUE_SITE</key><string>https://shydrie.xyz/tinue/</string><key>TINUE_MOVED_TO</key><string>https://tinue-api.shydrie.xyz</string><key>TINUE_SECURE</key><string>1</string><key>TINUE_MIN_BUILD</key><string>$MIN_BUILD</string><key>TINUE_BOOK_VER</key><string>$BOOK_VER</string><key>TINUE_JUDGE</key><string>$JUDGE</string></dict>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
   <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>$HOME/Library/Logs/tinue.log</string><key>StandardErrorPath</key><string>$HOME/Library/Logs/tinue.log</string>

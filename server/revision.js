@@ -1,4 +1,4 @@
-// The commit this server runs, as logged with each attempt: scripts/deploy-crux.sh writes deploy/revision.json beside
+// The commit this server runs, as logged with each attempt: the deploy scripts write deploy/revision.json beside
 // the code before it restarts the server, so the file as read once at startup names the running code. A dirty deploy's
 // commit is followed by '+' and its diff's hash. TINUE_COMMIT, if set, comes first (a checkout may hold the file of its
 // last deploy); no usable file: ''.

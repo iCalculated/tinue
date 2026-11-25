@@ -1,5 +1,6 @@
 #!/bin/sh
-# Publish puzzle CONTENT to crux: only rows that are new or changed since what crux has, in one transaction, after a
+# Publish puzzle CONTENT to the API host ("crux" below; TINUE_HOST set: the Linux host, where everything that touches the
+# database runs as tinue, and the snapshot is node's backup, never the sqlite3 CLI): only rows that are new or changed since what crux has, in one transaction, after a
 # snapshot of crux's database. Code goes separately (scripts/deploy-crux.sh); this ships no server code.
 # usage: scripts/publish-puzzles.sh [--dry-run] [--all] [--overwrite-remote-edits]
 #   --dry-run                print every remote and destructive command; the delta is estimated against the manifest
@@ -20,7 +21,7 @@
 # the publish before anything is written. The new version is NOT served until TINUE_BOOK_VER (the pointer: BOOK_VER in
 # deploy-lib.sh, then deploy-crux.sh) is raised to it; lowering the pointer again hides it (rollback). The publish never moves the pointer.
 # A change to an existing puzzle's tree, tps or komi bumps its rev; the old ones are kept in puzzle_rev (import.mjs).
-# Local DB: $TINUE_DB or data/tinue.db (read-only). Rollback: stop com.shy.tinue, copy the snapshot over data/tinue.db
+# Local DB: $TINUE_DB or data/tinue.db (read-only). Rollback: stop the server, copy the snapshot over data/tinue.db
 # (and remove data/tinue.db-wal, -shm), start it; attempts played since the snapshot are lost.
 set -e
 cd "$(dirname "$0")/.."
@@ -37,24 +38,24 @@ mkdir -p "$STATE"
 W="$STATE/publish/$TS"; [ -n "$DRY" ] && W=$(mktemp -d "${TMPDIR:-/tmp}/tinue-publish-dry.XXXXXX")
 mkdir -p "$W"
 PR="node --no-warnings scripts/puzzle-rows.mjs"
-RNODE="'$REMOTE_NODE' --no-warnings"
+RNODE="${RAS:+$RAS }'$REMOTE_NODE' --no-warnings"
 
 # 1. crux's fingerprints (read-only on crux; the reader is shipped first, outside the server code)
-remote 'mkdir -p ~/Projects/tinue/deploy/bin ~/Projects/tinue/deploy/publish'
-push scripts/puzzle-rows.mjs "$HOST":Projects/tinue/deploy/bin/puzzle-rows.mjs
+remote "$UNFENCED; mkdir -p $RCD/deploy/bin $RCD/deploy/publish"
+push scripts/puzzle-rows.mjs "$HOST":$RDIR/deploy/bin/puzzle-rows.mjs
 manifest() { # manifest OUT: crux's fingerprints into OUT
-  if [ -n "$DRY" ]; then echo "[dry-run] $SSH $HOST \"cd ~/Projects/tinue && $RNODE deploy/bin/puzzle-rows.mjs manifest data/tinue.db > deploy/manifest.tsv && gzip -c deploy/manifest.tsv\" > $1.gz"; return; fi
+  if [ -n "$DRY" ]; then echo "[dry-run] $SSH $HOST \"cd $RCD && $RNODE deploy/bin/puzzle-rows.mjs manifest data/tinue.db > deploy/manifest.tsv && gzip -c deploy/manifest.tsv\" > $1.gz"; return; fi
   # into a file first, so a failing reader fails the ssh (a pipe would report gzip's success and an empty manifest)
-  $SSH "$HOST" "cd ~/Projects/tinue && $RNODE deploy/bin/puzzle-rows.mjs manifest data/tinue.db > deploy/manifest.tsv && gzip -c deploy/manifest.tsv" > "$1.gz"
+  $SSH "$HOST" "cd $RCD && $RNODE deploy/bin/puzzle-rows.mjs manifest data/tinue.db > deploy/manifest.tsv && gzip -c deploy/manifest.tsv" > "$1.gz"
   gunzip -f "$1.gz"
   # An empty answer would make every row look new; a database with no puzzles is a first install (deploy-crux.sh --legacy).
   [ -s "$1" ] || { echo "publish-puzzles: crux reported no puzzles; refusing (a first install goes through scripts/deploy-crux.sh --legacy)" >&2; exit 1; }
 }
 BK="node --no-warnings scripts/publish-puzzles-book.mjs"
-push scripts/publish-puzzles-book.mjs "$HOST":Projects/tinue/deploy/bin/publish-puzzles-book.mjs
+push scripts/publish-puzzles-book.mjs "$HOST":$RDIR/deploy/bin/publish-puzzles-book.mjs
 book_manifest() { # book_manifest OUT: crux's live book rows into OUT
-  if [ -n "$DRY" ]; then echo "[dry-run] $SSH $HOST \"cd ~/Projects/tinue && $RNODE deploy/bin/publish-puzzles-book.mjs manifest data/tinue.db > deploy/book-manifest.tsv && gzip -c deploy/book-manifest.tsv\" > $1.gz"; return; fi
-  $SSH "$HOST" "cd ~/Projects/tinue && $RNODE deploy/bin/publish-puzzles-book.mjs manifest data/tinue.db > deploy/book-manifest.tsv && gzip -c deploy/book-manifest.tsv" > "$1.gz"
+  if [ -n "$DRY" ]; then echo "[dry-run] $SSH $HOST \"cd $RCD && $RNODE deploy/bin/publish-puzzles-book.mjs manifest data/tinue.db > deploy/book-manifest.tsv && gzip -c deploy/book-manifest.tsv\" > $1.gz"; return; fi
+  $SSH "$HOST" "cd $RCD && $RNODE deploy/bin/publish-puzzles-book.mjs manifest data/tinue.db > deploy/book-manifest.tsv && gzip -c deploy/book-manifest.tsv" > "$1.gz"
   gunzip -f "$1.gz"
   head -1 "$1" | grep -q '^#book ' || { echo "publish-puzzles: crux's book manifest has no header; refusing" >&2; exit 1; }
 }
@@ -87,36 +88,41 @@ if [ "$NB" != 0 ]; then
 fi
 
 # 3. ship the rows, snapshot, import them in one transaction, restart, health
-remote "mkdir -p ~/Projects/tinue/deploy/publish/$TS/rows ~/Projects/tinue/deploy/publish/$TS/book"
-push "$W/rows/puzzles.jsonl.gz" "$HOST":Projects/tinue/deploy/publish/$TS/rows/
-if [ "$NB" != 0 ]; then push "$W/book/book.jsonl.gz" "$HOST":Projects/tinue/deploy/publish/$TS/book/; fi
-remote "set -e; cd ~/Projects/tinue
-  NODE='$REMOTE_NODE'; SQLITE='$REMOTE_SQLITE'; TS=$TS; HEALTH_TRIES=30; NB=$NB; BOOKARGS='$BOOKARGS'"'
+remote "mkdir -p $RCD/deploy/publish/$TS/rows $RCD/deploy/publish/$TS/book"
+push "$W/rows/puzzles.jsonl.gz" "$HOST":$RDIR/deploy/publish/$TS/rows/
+if [ "$NB" != 0 ]; then push "$W/book/book.jsonl.gz" "$HOST":$RDIR/deploy/publish/$TS/book/; fi
+remote "set -e; cd $RCD
+  AS='$RAS'; NODE='$REMOTE_NODE'; SQLITE='$REMOTE_SQLITE'; TS=$TS; HEALTH_TRIES=30; NB=$NB; BOOKARGS='$BOOKARGS'"'
   D=deploy/publish/$TS; SNAP=data/snapshots/tinue-$TS-pre-publish.db
   # crux'"'"'s import must know --book (B2), or it would take the flag for nothing and skip the book: refuse before writing
   if [ "$NB" != 0 ] && ! grep -q import-book-v1 scripts/import.mjs; then echo "publish: crux'"'"'s scripts/import.mjs predates book publishing (B2); deploy the code first (scripts/deploy-crux.sh). Nothing written."; exit 1; fi
   gunzip -f $D/rows/puzzles.jsonl.gz
   [ "$NB" = 0 ] || gunzip -f $D/book/book.jsonl.gz
-  count() { "$SQLITE" "$1" "SELECT COUNT(*) FROM puzzles"; } # a read (no -readonly: a WAL database with no -shm would refuse it)
-  mkdir -p data/snapshots
+  $AS mkdir -p data/snapshots
   echo "snapshot: $SNAP"
-  "$SQLITE" data/tinue.db ".backup '"'"'$SNAP'"'"'"
-  # The copy is made a standalone file (no WAL); journal_mode=DELETE checkpoints first, so its -shm is then only an index.
-  [ "$("$SQLITE" $SNAP "PRAGMA journal_mode=DELETE")" = delete ] && rm -f $SNAP-shm $SNAP-wal
-  [ "$("$SQLITE" $SNAP "PRAGMA quick_check")" = ok ] || { echo "snapshot: FAILED quick_check; nothing imported"; exit 1; }
+  if [ -n "$AS" ]; then
+    count() { $AS "$NODE" --no-warnings ops/move/db.mjs count "$1"; }
+    $AS "$NODE" --no-warnings ops/move/db.mjs backup data/tinue.db $SNAP || { echo "snapshot: FAILED; nothing imported"; exit 1; } # standalone, quick_check inside
+  else
+    count() { "$SQLITE" "$1" "SELECT COUNT(*) FROM puzzles"; } # a read (no -readonly: a WAL database with no -shm would refuse it)
+    "$SQLITE" data/tinue.db ".backup '"'"'$SNAP'"'"'"
+    # The copy is made a standalone file (no WAL); journal_mode=DELETE checkpoints first, so its -shm is then only an index.
+    [ "$("$SQLITE" $SNAP "PRAGMA journal_mode=DELETE")" = delete ] && rm -f $SNAP-shm $SNAP-wal
+    [ "$("$SQLITE" $SNAP "PRAGMA quick_check")" = ok ] || { echo "snapshot: FAILED quick_check; nothing imported"; exit 1; }
+  fi
   BEFORE=$(count data/tinue.db); SNAPN=$(count $SNAP)
   [ "$BEFORE" = "$SNAPN" ] || { echo "snapshot: has $SNAPN puzzles, the database $BEFORE; nothing imported"; exit 1; }
-  echo "snapshot: ok ($SNAPN puzzles, $(du -h $SNAP | cut -f1)); $(ls data/snapshots | wc -l | tr -d " ") snapshots, $(df -h . | tail -1 | awk "{print \$4}") free"
+  echo "snapshot: ok ($SNAPN puzzles, $($AS du -h $SNAP | cut -f1)); $($AS ls data/snapshots | wc -l | tr -d " ") snapshots, $(df -h . | tail -1 | awk "{print \$4}") free"
   echo "rows before: $BEFORE"
   # A refused import (exit 1/2) rolled back: nothing written. Exit 4: committed, but the status backfill failed (status
   # decides serving): stop before the restart and say what to run. Either way the publish stops here.
-  RC=0; OUT=$(cd $D && "$NODE" --no-warnings ../../../scripts/import.mjs rows $BOOKARGS) || RC=$?
+  RC=0; OUT=$(cd $D && $AS "$NODE" --no-warnings ../../../scripts/import.mjs rows $BOOKARGS) || RC=$?
   echo "$OUT" | head -1; echo "$OUT" | grep "^grade overrides\|^refund mark\|^puzzle state\|^puzzle rev\|^book" || true
-  if [ $RC = 4 ]; then echo "publish: FAILED AFTER the import committed: puzzle status NOT updated; run (cd ~/Projects/tinue && $NODE --no-warnings scripts/puzzle-state.mjs) and then restart com.shy.tinue. Not restarted."; exit 1; fi
+  if [ $RC = 4 ]; then echo "publish: FAILED AFTER the import committed: puzzle status NOT updated; run (cd $PWD && $AS $NODE --no-warnings scripts/puzzle-state.mjs) and then restart the server. Not restarted."; exit 1; fi
   if [ $RC != 0 ]; then echo "publish: import refused or failed (exit $RC); it rolled back, nothing written, not restarted"; exit 1; fi
   AFTER=$(count data/tinue.db)
   echo "rows after: $AFTER ($((AFTER - BEFORE)) new)"
-  launchctl kickstart -k gui/$(id -u)/com.shy.tinue # theme counts and board pictures are cached in the server'"$REMOTE_HEALTH"
+  '"$RRESTART"' # theme counts and board pictures are cached in the server'"$REMOTE_HEALTH"
 
 manifest "$W/remote-after.tsv"
 book_manifest "$W/book-after.tsv"
@@ -126,5 +132,5 @@ $BK verify "$W/book-shipped.tsv" "$W/book-after.tsv"
 cp "$W/local.tsv" "$STATE/published.tsv"; cp "$W/remote-after.tsv" "$STATE/last-remote.tsv"; cp "$W/book-after.tsv" "$STATE/last-remote-book.tsv"
 echo "publish: $N rows and $NB book rows published; record in $W"
 if [ "$NB" != 0 ]; then
-  echo "publish: crux's book is now at version $(head -1 "$W/book-after.tsv" | cut -d' ' -f2). Nothing is served from it until TINUE_BOOK_VER (BOOK_VER in deploy-lib.sh, then deploy-crux.sh) reaches it; lowering it again hides it."
+  echo "publish: crux's book is now at version $(head -1 "$W/book-after.tsv" | cut -d' ' -f2). Nothing is served from it until TINUE_BOOK_VER (BOOK_VER in deploy-lib.sh, then a deploy) reaches it; lowering it again hides it."
 fi

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Live "tinue players" page: every attempt (accounts + anonymous guests) with rating over time.
-// Runs on crux and reads the DB read-only.
-//   HOST=… PORT=8792 node scripts/players-live/server.mjs     (launchd com.shy.tinue-players)
+// Runs beside the API server and reads the DB read-only.
+//   HOST=… PORT=8792 node scripts/players-live/server.mjs     (systemd tinue-players; on crux launchd com.shy.tinue-players)
 // It may be served to the public (Sasha, 2026-11-22: nothing on it is sensitive). What keeps that safe:
 // it never reads a token, email or address column and shows a guest's browser id only as its first eight
 // characters (the whole id can claim a nameless guest's row, see newGuest in server/server.js); the page is built

@@ -1,0 +1,21 @@
+[Unit]
+Description=tinue gate (in the path only while the API moves)
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+User=tinue
+Group=tinue
+Environment=GATE_MODE=/var/lib/tinue-gate/mode GATE_STATUS=/run/tinue-gate/status
+ExecStart=/usr/local/bin/node --no-warnings /srv/tinue/ops/gate.mjs
+RuntimeDirectory=tinue-gate
+Restart=always
+RestartSec=1
+KillMode=mixed
+# it refuses the first SIGTERM while it holds requests
+TimeoutStopSec=660
+ProtectSystem=strict
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+[Install]
+WantedBy=multi-user.target

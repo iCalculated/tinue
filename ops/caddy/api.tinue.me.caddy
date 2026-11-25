@@ -1,0 +1,10 @@
+api.tinue.me {
+	import tls
+	@api path /api /api/* /p/*
+	handle @api {
+		import upstream
+	}
+	handle {
+		redir https://tinue.me/ 302
+	}
+}

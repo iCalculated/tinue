@@ -1,0 +1,6 @@
+[Unit]
+Description=has Cloudflare's published range list changed?
+[Service]
+Type=oneshot
+DynamicUser=yes
+ExecStart=/bin/sh /srv/tinue/ops/cloudflare-ranges.sh check

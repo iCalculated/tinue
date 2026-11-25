@@ -1,0 +1,29 @@
+[Unit]
+Description=tinue API
+After=network.target
+# the single-writer rule (ops/README.md): no WRITER file, no server on this host
+ConditionPathExists=/var/lib/tinue/WRITER
+StartLimitIntervalSec=0
+[Service]
+User=tinue
+Group=tinue
+WorkingDirectory=/srv/tinue
+EnvironmentFile=/etc/tinue/tinue.env
+ExecStart=/usr/local/bin/node --no-warnings server/server.js
+Restart=always
+RestartSec=1
+SuccessExitStatus=143
+KillMode=mixed
+TimeoutStopSec=15
+UMask=0077
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tinue
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+[Install]
+WantedBy=multi-user.target

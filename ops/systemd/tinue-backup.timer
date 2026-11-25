@@ -1,0 +1,7 @@
+[Unit]
+Description=tinue database backup, every 10 minutes
+[Timer]
+OnCalendar=*:0/10
+Persistent=yes
+[Install]
+WantedBy=timers.target

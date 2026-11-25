@@ -43,7 +43,8 @@ shim('sqlite3', 'echo "sqlite3 $*" >> "$FAKE_LOG"; exec /usr/bin/sqlite3 "$@"');
 shim('rnode', `echo "node $*" >> "$FAKE_LOG"; exec '${process.execPath}' "$@"`);
 const log = () => fs.readFileSync(LOG, 'utf8').split('\n').filter(Boolean);
 const clearLog = () => fs.writeFileSync(LOG, '');
-const ENV = { ...process.env, PATH: SH + ':' + process.env.PATH, FAKE_LOG: LOG, FAKE_CRUX: CRUX, FAKE_SHIMS: SH, CRUX: 'shy@crux',
+const { TINUE_HOST: _host, ...SHELL } = process.env;
+const ENV = { ...SHELL, PATH: SH + ':' + process.env.PATH, FAKE_LOG: LOG, FAKE_CRUX: CRUX, FAKE_SHIMS: SH, CRUX: 'shy@crux',
   CRUX_NODE: path.join(SH, 'rnode'), CRUX_SQLITE: path.join(SH, 'sqlite3'), TINUE_DEPLOY_DIR: STATE, TINUE_DB: LOCAL_DB, DRY_RUN: '' };
 const sh = (script, args = []) => { const r = spawnSync('sh', [path.join(ROOT, 'scripts', script), ...args], { env: ENV, encoding: 'utf8', timeout: 120e3 }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
 const ok = (r, what) => assert.equal(r.code, 0, `${what} failed:\n${r.out}`);

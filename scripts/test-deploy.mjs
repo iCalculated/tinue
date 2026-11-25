@@ -52,7 +52,8 @@ const log = () => fs.readFileSync(LOG, 'utf8').split('\n').filter(Boolean);
 const clearLog = () => fs.writeFileSync(LOG, '');
 const at = (lines, re) => lines.findIndex((l) => re.test(l));
 
-const ENV = { ...process.env, PATH: SH + ':' + process.env.PATH, FAKE_LOG: LOG, FAKE_CRUX: CRUX, FAKE_SHIMS: SH, CRUX: 'shy@crux',
+const { TINUE_HOST: _host, PAGES: _pages, ...SHELL } = process.env; // the fake host is crux unless a case says otherwise
+const ENV = { ...SHELL, PATH: SH + ':' + process.env.PATH, FAKE_LOG: LOG, FAKE_CRUX: CRUX, FAKE_SHIMS: SH, CRUX: 'shy@crux',
   CRUX_NODE: path.join(SH, 'rnode'), CRUX_SQLITE: path.join(SH, 'sqlite3'), TINUE_DEPLOY_DIR: STATE, TINUE_DB: LOCAL_DB, SITE, DRY_RUN: '' };
 function sh(script, args = [], extra = {}) {
   const r = spawnSync('sh', [path.join(ROOT, 'scripts', script), ...args], { env: { ...ENV, ...extra }, encoding: 'utf8', timeout: 120e3 });
@@ -89,6 +90,7 @@ const puzzlesOnCrux = () => JSON.stringify(q('SELECT * FROM puzzles ORDER BY id'
   assert.ok(L.some((l) => /^tailscale funnel --bg --https=8443 8642$/.test(l)) && !L.some((l) => /https=443\b/.test(l)), 'Funnel on 8443 only');
   const rev = JSON.parse(fs.readFileSync(path.join(CRUX, 'Projects/tinue/deploy/revision.json'), 'utf8'));
   assert.equal(rev.sha, spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout.trim(), 'revision.json names the commit');
+  assert.deepEqual(Object.keys(rev), ['sha', 'short', 'dirty', 'diff', 'branch', 'at'], 'and no person or machine');
   assert.ok(fs.existsSync(path.join(CRUX, 'Projects/tinue/server/server.js')) && !fs.existsSync(path.join(CRUX, 'Projects/tinue/dev')), 'code shipped, dev/ not');
   // the plist: valid, and its switches are the server's own defaults
   const PL = path.join(CRUX, 'Library/LaunchAgents/com.shy.tinue.plist');
@@ -97,7 +99,7 @@ const puzzlesOnCrux = () => JSON.stringify(q('SELECT * FROM puzzles ORDER BY id'
     assert.equal(j.status, 0, j.stdout + j.stderr);
     const { TINUE_MIN_BUILD, ...env } = JSON.parse(j.stdout).EnvironmentVariables;
     assert.match(TINUE_MIN_BUILD, /^\d{10}$/);
-    assert.deepEqual(env, { PORT: '8642', HOST: '127.0.0.1', TINUE_ORIGINS: 'https://shydrie.xyz', TINUE_SECURE: '1', TINUE_BOOK_VER: '0', TINUE_JUDGE: 'off' });
+    assert.deepEqual(env, { PORT: '8642', HOST: '127.0.0.1', TINUE_ORIGINS: 'https://tinue.me,https://shydrie.xyz', TINUE_SITE: 'https://shydrie.xyz/tinue/', TINUE_MOVED_TO: 'https://tinue-api.shydrie.xyz', TINUE_SECURE: '1', TINUE_BOOK_VER: '0', TINUE_JUDGE: 'off' });
   }
   // second deploy: plist unchanged, restart in place
   clearLog(); ok(sh('deploy-crux.sh'), 'second deploy-crux.sh');
@@ -105,6 +107,14 @@ const puzzlesOnCrux = () => JSON.stringify(q('SELECT * FROM puzzles ORDER BY id'
   // health failure is a hard failure
   clearLog(); const bad = sh('deploy-crux.sh', [], { FAKE_HEALTH: 'down' });
   assert.notEqual(bad.code, 0, 'deploy must fail when node does not answer'); assert.match(bad.out, /health: FAILED/);
+  // fenced (its database moved): nothing is shipped, no restart, by any script, whatever TINUE_HOST says
+  fs.writeFileSync(path.join(CRUX, 'Projects/tinue/data/MOVED'), 'x');
+  for (const a of [['deploy-crux.sh'], ['deploy-crux.sh', ['--legacy']], ['deploy-crux.sh', [], { TINUE_HOST: 'u@elsewhere' }], ['publish-puzzles.sh']]) {
+    clearLog(); const f = sh(...a);
+    assert.notEqual(f.code, 0, a[0] + ' went to a fenced host'); assert.match(f.out, /refused: this host is fenced/);
+    assert.ok(!log().some((l) => /^rsync|^launchctl|import\.mjs|elsewhere/.test(l)), log().join('\n'));
+  }
+  fs.rmSync(path.join(CRUX, 'Projects/tinue/data/MOVED'));
   console.log('code deploy: ok (no puzzle row touched, health after restart, revision recorded, health failure fails)');
 }
 
@@ -210,6 +220,36 @@ const puzzlesOnCrux = () => JSON.stringify(q('SELECT * FROM puzzles ORDER BY id'
   assert.deepEqual(log(), [], 'a dry run invoked a remote or network command');
   assert.equal(puzzlesOnCrux(), before); assert.equal(spawnSync('git', ['-C', SITE, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout, siteHead);
   console.log('dry run: ok (no shim invoked, crux and site unchanged)');
+}
+
+// 4b. with TINUE_HOST the same scripts go to the Linux host: no launchctl, no tailscale, no sqlite3 CLI, the database as tinue
+{
+  const H = { TINUE_HOST: 'u@linux' };
+  clearLog();
+  const d = sh('deploy-ovh.sh', ['--dry-run'], H); ok(d, 'deploy-ovh.sh --dry-run');
+  assert.match(d.out, /systemctl restart tinue\.service/); assert.match(d.out, /TINUE_ORIGINS=https:\/\/tinue\.me,https:\/\/shydrie\.xyz\n/); assert.match(d.out, /TINUE_MOVED_FROM=\n/);
+  assert.match(d.out, /--exclude \/data --exclude \/deploy/); assert.match(d.out, /no WRITER file/);
+  const p = sh('publish-puzzles.sh', ['--dry-run'], H); ok(p, 'publish-puzzles.sh --dry-run to the Linux host');
+  assert.match(p.out, /u@linux/); assert.match(p.out, /AS='sudo -n -u tinue'/); assert.match(p.out, /sudo -n systemctl restart tinue\.service/);
+  const s = sh('ship.sh', ['--dry-run', '--puzzles'], { ...H, PUSH_SOURCE: 'true', BUILD_STATIC: 'true' }); ok(s, 'ship.sh --dry-run to the Linux host');
+  assert.match(s.out, /deploy-ovh|API code to u@linux/); assert.match(s.out, /curl https:\/\/api\.tinue\.me\/api\/stats/); assert.match(s.out, /curl https:\/\/tinue-api\.shydrie\.xyz\/api\/stats/);
+  for (const r of [d, p, s]) assert.ok(!/launchctl|tailscale|Projects\/tinue|shy@crux|funnel/i.test(r.out), r.out.match(/.*(?:launchctl|tailscale|Projects\/tinue|shy@crux|funnel).*/i)?.[0]);
+  assert.equal(sh('deploy-ovh.sh', ['--dry-run']).code, 2, 'no default host');
+  assert.equal(sh('ship.sh', ['--dry-run', '--legacy'], H).code, 2);
+  assert.deepEqual(log(), [], 'a dry run invoked a remote or network command');
+  clearLog(); ok(sh('check-public.sh', [], H), 'both names up');
+  assert.equal(log().filter((l) => l === 'curl public').length, 2, 'both names, no Funnel relay'); assert.ok(!log().some((l) => /funnel|dig/.test(l)));
+  assert.equal(sh('check-public.sh', [], { ...H, FAKE_PUBLIC: '526' }).code, 1);
+  // a real publish there, on the stand-in: snapshot by node as tinue, import as tinue, restart by systemctl
+  shim('sudo', `[ "$1" = -n ] && shift; if [ "$1" = -u ]; then echo "as $2: $3 $4 $5 $6" >> "$FAKE_LOG"; shift 2; fi; exec "$@"`);
+  shim('systemctl', 'echo "systemctl $*" >> "$FAKE_LOG"');
+  fs.cpSync(path.join(ROOT, 'ops'), path.join(CRUX, 'Projects/tinue/ops'), { recursive: true });
+  clearLog();
+  const pub = sh('publish-puzzles.sh', [], { ...H, TINUE_SRV: 'Projects/tinue', TINUE_NODE: path.join(SH, 'rnode') }); ok(pub, 'publish to the Linux host');
+  const L = log(), snap = at(L, /^as tinue: .*db\.mjs backup/), imp = at(L, /^as tinue: .*import\.mjs/);
+  assert.ok(snap >= 0 && imp > snap && at(L, /^systemctl restart tinue\.service$/) > imp && at(L, /^curl health/) > imp, L.join('\n'));
+  assert.ok(!L.some((l) => /^sqlite3|^launchctl/.test(l))); assert.match(pub.out, /verify: 1 of 1 shipped rows now match/);
+  console.log('Linux host: ok (deploy, publish and ship target it; both API names required)');
 }
 
 // 5. stubs: skipping unchanged pages gives the same directory as writing them all
