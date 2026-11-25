@@ -59,8 +59,6 @@ select { appearance: none; -webkit-appearance: none; padding-right: 28px; backgr
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field > span { font-size: var(--fs-xs); color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .field select { width: 100%; }
-.help { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font: 600 10px/1 system-ui, sans-serif; }
-.help:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- header: logo, plain nav, one quiet control ---------- */
 .top { display: flex; align-items: center; gap: 28px; padding: 0 24px; height: 56px; background: var(--bg2); border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -103,7 +101,7 @@ button.danger { background: var(--bad-fill); border-color: var(--bad-fill); colo
 .build-bar .x:hover { color: var(--fg-hi); }
 .side { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 .panel { background: var(--bg2); border-radius: var(--r-panel); padding: var(--pad); box-shadow: 0 2px 2px rgba(0,0,0,.25); }
-.page { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+.page { max-width: 640px; margin: 24px auto; padding: 0 16px; }
 
 /* ---------- board (PTN Ninja's, in an iframe: public/ninja.js) ---------- */
 .board-wrap { position: relative; }
@@ -142,18 +140,28 @@ button.danger { background: var(--bad-fill); border-color: var(--bad-fill); colo
 
 .your-rating { color: var(--gold); font-weight: 700; }
 .tag { display: inline-block; font-size: var(--fs-xs); background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; margin: 2px 4px 2px 0; color: var(--fg); }
-a.tag:hover { border-color: var(--accent); color: var(--fg-hi); }
+button.tag { height: auto; font-weight: 400; }
+button.tag:hover, button.tag[aria-expanded="true"] { border-color: var(--accent); color: var(--fg-hi); background: var(--bg3); }
+.tag-def { margin: 8px 0 0; color: var(--fg); }
+.tag-def .practice { font-size: var(--fs-xs); white-space: nowrap; }
+.tag-def .gap { word-spacing: 8px; } /* (the space before Practice: dropped at a line break, as a margin isn't) */
+@media (max-width: 360px) {
+  .page table.t.hist td, .page table.t.hist th { padding-left: 4px; padding-right: 4px; }
+  .page table.t.hist td.num { font-size: var(--fs-xs); }
+  .page table.t.hist td.res { width: 22px; }
+}
+@media (pointer: coarse) { button.tag { padding: 7px 12px; border-radius: 17px; } }
 .delta.up { color: var(--good); }
 .delta.down { color: var(--bad); }
 
 .controls { display: flex; flex-direction: column; gap: 12px; }
 .controls .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.theme-desc:empty { display: none; }
 .theme-desc { margin: -4px 0 0; color: var(--muted); font-size: var(--fs-xs); }
 /* Under the filters, the way to the Settings page (Board, PTN Ninja look, Confirm moves live only there). */
 .controls .set-link { margin: 0; font-size: var(--fs-xs); }
 /* The Settings page (#/settings): one setting a row, its control on the right on wide screens, under its name on phones. */
-.settings-page { max-width: 720px; }
-.settings-page .set-status { color: var(--muted); font-size: var(--fs-sm); margin: -4px 0 14px; min-height: 1.4em; }
+.set-status { color: var(--muted); font-size: var(--fs-sm); margin: 0 0 12px; min-height: 1.4em; }
 .set-list { display: flex; flex-direction: column; gap: 0; padding-top: 4px; padding-bottom: 4px; }
 .set-item { display: grid; grid-template-columns: minmax(0, 1fr) 200px; grid-template-areas: "label ctl" "desc desc"; column-gap: 16px; row-gap: 4px; align-items: center; padding: 12px 0; }
 .set-item + .set-item { border-top: 1px solid var(--line); }
@@ -166,7 +174,7 @@ a.tag:hover { border-color: var(--accent); color: var(--fg-hi); }
 .set-look { grid-column: 1 / -1; display: flex; gap: 8px; min-width: 0; }
 .set-look input { flex: 1 1 auto; min-width: 0; }
 @media (max-width: 560px) {
-  .set-item { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "ctl" "desc"; }
+  .set-item { grid-template-columns: minmax(0, 1fr) 170px; }
   .set-look { flex-wrap: wrap; }
   .set-look input { flex-basis: 100%; }
   .set-look button { flex: 1 1 0; }
@@ -288,20 +296,43 @@ h1 { color: var(--fg-hi); font-weight: 500; }
 table.t { width: 100%; border-collapse: collapse; background: var(--bg2); border-radius: var(--r-panel); overflow: hidden; font-size: var(--fs-sm); }
 table.t th, table.t td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); }
 table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
-.chart { background: var(--bg2); border-radius: var(--r-panel); padding: 12px; margin-bottom: 16px; }
-.glossary dl { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 10px 20px; background: var(--bg2); border-radius: var(--r-panel); padding: var(--pad) 20px; }
-.glossary dt { color: var(--fg-hi); font-weight: 600; }
-.glossary dd { margin: 0; }
-.glossary dd .practice { font-size: var(--fs-xs); white-space: nowrap; }
-.glossary dd .gap { word-spacing: 8px; } /* (the space before Practice: dropped at a line break, as a margin isn't) */
+table.t th.num, table.t td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.t .prov { display: inline-block; width: 0; margin: 0; } /* (the "?" hangs past the digits, which line up) */
+.t tr:last-child td { border-bottom: 0; }
+.t td.who { overflow-wrap: anywhere; }
+.t tr.you td { background: var(--bg3); color: var(--fg-hi); }
+.t em { font-style: normal; font-size: var(--fs-xs); color: var(--accent); margin-left: 4px; }
+.t.lead th:first-child, .t.lead td:first-child { width: 48px; }
+.hist td, .hist thead th { padding-top: 6px; padding-bottom: 6px; }
+.hist .res { width: 34px; padding-right: 0; }
+.hist .res.good { color: var(--good); }
+.hist .res.bad { color: var(--bad); }
+.hist td > .muted { font-size: var(--fs-xs); }
+table.t.hist tr.day th { background: var(--bg3); color: var(--fg); padding: 5px 12px; }
+.page-note { margin: 8px 0; font-size: var(--fs-xs); }
+.hist-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin: 0 0 12px; }
+.hist-sum .your-rating { font-size: 24px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.page .guest-note { margin-bottom: 16px; }
+/* the rating chart: round ratings at the left, the days its ends (and middle) fall on below */
+.chart { background: var(--bg2); border-radius: var(--r-panel); padding: 12px 14px 8px 12px; margin-bottom: 12px; }
+.plot { position: relative; height: 150px; margin-left: 38px; color: var(--accent); touch-action: pan-y; cursor: crosshair; user-select: none; -webkit-user-select: none; }
+.plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.plot .grid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.plot .grid span { position: absolute; right: 100%; top: -8px; padding-right: 8px; font: var(--fs-xs)/15px "Noto Sans", sans-serif; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plot-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--fg-hi); pointer-events: none; }
+.plot-tip { position: absolute; padding: 3px 8px; background: var(--bg4); border-radius: var(--r-ctl); font-size: var(--fs-xs); color: var(--fg); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.plot-tip b { color: var(--fg-hi); }
+.plot-dot[hidden], .plot-tip[hidden] { display: none; }
+.plot-dates { display: flex; justify-content: space-between; margin: 6px 0 0 38px; font-size: var(--fs-xs); color: var(--muted); }
 .flush { margin: 0; }
 .page .panel { margin-top: 8px; }
 .credits { max-width: 640px; margin: 40px auto 0; padding: 16px 16px 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--fs-xs); line-height: 1.6; text-align: center; text-wrap: balance; }
 .credits p { margin: 0 0 6px; }
 .credits a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
 .credits a:hover { color: var(--fg-hi); text-decoration-color: currentColor; }
-.token { display: flex; gap: 8px; margin: -6px 0 16px; max-width: 520px; }
-.token input { flex: 1; min-width: 0; font-family: var(--mono); color: var(--fg); }
+.token { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; font-size: var(--fs-sm); }
+.token span { flex: 1 1 9em; min-width: 0; }
+.token input { flex: 1 1 100%; min-width: 0; font-family: var(--mono); color: var(--fg); }
 
 @media (max-width: 860px) {
   .puzzle-page { grid-template-columns: 1fr; padding: 8px 8px 16px; }
@@ -357,10 +388,12 @@ table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
   .puzzle-page.docked #feedback .actions { display: none; }
 }
 @media (max-width: 600px) {
+  .t.hist td, .t.hist thead th { padding-left: 6px; padding-right: 6px; }
+  .t.hist td:first-child { padding-left: 12px; }
+  .t.hist td:last-child, .t.hist th:last-child { padding-right: 12px; }
+  .hist td > .muted { display: block; }
   .top nav { order: 3; width: 100%; } /* brand + account on the first row, nav on the second */
-  .top nav { gap: 16px; } /* five links fit 375 px with room to spare */
-  .glossary dl { grid-template-columns: 1fr; gap: 2px 0; }
-  .glossary dd { margin-bottom: 10px; }
+  .top nav { gap: 16px; } /* four links fit 375 px with room to spare */
 }
 @media (pointer: coarse) {
   .top nav a { padding: 6px 0; }
@@ -372,8 +405,7 @@ table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
    swell, the combo bar, the pop, the clock's tint, the board dimming at the end), always --rush-ease, except the combo
    bar's red drain (ease-in). Reduced motion is handled once, at the end of this block. */
 #view-rush { --rush-fast: 160ms; --rush-base: 300ms; --rush-ease: cubic-bezier(.2,.8,.2,1); }
-.rush-page { max-width: 640px; }
-.rush-page h1 { margin: 0 0 12px; }
+.page h1 { margin: 0 0 12px; }
 .rush-page h1:focus { outline: none; } /* (focused by script when a screen changes, not by the user) */
 .rush-page h2 { font-size: var(--fs-lg); margin: 18px 0 8px; }
 .rush-page .panel h2 { margin-top: 0; }
@@ -401,7 +433,9 @@ table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
 .rush-hero { margin: 0 0 12px; }
 .rush-hero span { display: block; color: var(--muted); font-size: var(--fs-sm); }
 .rush-hero b { display: block; font-size: 48px; font-weight: 700; line-height: 1.1; color: var(--fg-hi); font-variant-numeric: tabular-nums; } /* (the UI face, as the other stats) */
-.rush-toplist { margin: 0; padding-left: 22px; }
+.rush-toplist { margin: 0; padding-left: 26px; font-variant-numeric: tabular-nums; }
+.rush-toplist li { position: relative; padding-right: 2.6em; overflow-wrap: anywhere; }
+.rush-toplist li b { position: absolute; right: 0; top: 0; }
 .rush-toplist li.guest span { color: var(--muted); } /* guests quieter than named accounts */
 .rush-toplist li em { font-style: normal; font-size: var(--fs-xs); color: var(--accent); margin-left: 6px; }
 /* this browser's recent runs: one row each (when, mode, score, accuracy) in fixed columns, opening it on the end screen */
@@ -414,7 +448,6 @@ table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
 .rush-clear { margin-top: 8px; font-size: var(--fs-xs); color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #rush-clear-yes { color: var(--bad); }
 #rush-clear-no { color: var(--fg-hi); }
-.rush-toplist li span { display: inline-block; min-width: 60%; }
 .rush-newbest { color: var(--gold); font-weight: 600; min-height: 1.45em; margin: 0 0 8px; }
 .rush-newbest.bad { color: var(--bad); }
 .rush-when { color: var(--muted); font-weight: 400; } /* (a stored run's date, or where an unsent run went: news, not a best) */
@@ -538,7 +571,7 @@ table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
 .rush-turn.black i { background: var(--p2); border-color: var(--p2-edge); }
 .rush-turn.sm { display: inline-block; width: 22px; height: 22px; vertical-align: -6px; margin-right: 6px; }
 .rush-turn.flip i { animation: rush-stone var(--rush-base) var(--rush-ease); }
-/* the stone, first in the bar: the side to move is read before the clock (players on Discord, 2026-11-21, couldn't
+/* the stone, first in the bar: the side to move is read before the clock (2026-11-21: players couldn't
    tell whose turn it was). No words in the bar (Sasha): the board's green trim and the note under it, which starts with
    the side to play, say it too. In the bar, so nothing under it can push it down. */
 .rush-side { flex: none; display: flex; align-items: center; gap: 8px; }
@@ -568,6 +601,7 @@ table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
 #rush-board { background: #262421; border-radius: var(--corner, 6px); aspect-ratio: 0.79045; } /* the frame's box (ninja.js _size sets it per look and size) */
 @media (max-width: 600px) {
   .rush-page { margin-top: 8px; padding: 0 8px; }
+  .rush-start { padding: 16px 8px 0; } /* (the board needs the width; this screen keeps the other pages' gutter) */
   .rush-modes, .rush-boards { grid-template-columns: 1fr; }
   .rush-go { width: 100%; height: 44px; font-size: var(--fs); }
   .rush-hud { gap: 10px; padding: 4px 10px; min-height: 44px; }

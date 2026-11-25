@@ -7,7 +7,7 @@
 //            first move no sooner than one with an intro does). input-guard: the board itself is locked as long
 //            (board.js lock: no stack lifted or tray stone picked either; PTN Ninja's board stays off)
 //   actions  1000 ms from S.t0 (startClock, the board playable): Hint and Solution take no press and show disabled;
-//            the second tap on Next lands on Solution (rabbitboy84, 2026-11-16)
+//            the second tap on Next lands on Solution (seen 2026-11-16)
 //   next     600 ms from S.viewT0 (Solution pressed): Next puzzle (card and dock) takes no press; Enter isn't locked
 //   giveup   1500 ms from po.t0 (the play-out started): Give up takes no press and shows disabled; a tap meant for
 //            Hint, which sat in the same spot
