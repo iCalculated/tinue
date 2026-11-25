@@ -21,7 +21,7 @@ import { OTHER, syncedOf, decide, diff, changesBody, carried, unsentKeys, withUn
 import { parseLook, encodeLook, cleanLook, lookReport, THEMES as NINJA_THEMES, themeOf, withTheme, themeName, showLook } from './ninja-look.js';
 import * as defend from './defend.js';
 import { ninjaUrl, fromSyntaks, fromTiltak, fromChild, quickLine, mergeLines, pickCandidates, pinnedAt, threatGroups, chipLabel, numberedPV, ptnParts } from './analysis.js';
-import { whenText, symFromRecord } from './rush-rules.js';
+import { symFromRecord } from './rush-rules.js';
 import { freeOffer, freeFrom, freeExit, freeOverText, takeBack, freeDefender, freeFailKey, cardSplice, freeFocus } from './freeplay.js';
 import { orientPage, puzzleHash, symOf, toServer } from './pagesym.js';
 
@@ -1948,7 +1948,7 @@ const playOnUnratedText = (u) => u.why === 'tiltak' ? 'Not rated: Tiltak defende
 // Why a solved puzzle's result isn't rated ('': it is), the card and the phone's dock alike (on a docked phone only the
 // dock's line is seen).
 const unratedNote = () => S.notCounted ? notCountedText() : uncheckedText() || (S.casualWhy === 'tiltak' ? 'Not rated: Tiltak defended.'
-  : S.casual ? 'You used a hint, so this one didn’t count toward your rating.' : '');
+  : S.casual ? 'Not rated: you used a hint.' : '');
 const dockNoteText = () => [S.slowWin && slowWinText(S.slowWin) + '.', unratedNote(), shownOver() && 'Game over here. Step back with ◀ to explore.'].filter(Boolean).join(' ');
 // The feedback card (a live region). Returns whether Next puzzle should take keyboard focus once it is drawn.
 function renderFeedback(mood, delta) {
@@ -1972,17 +1972,17 @@ function renderFeedback(mood, delta) {
   const missNote = () => S.notCounted ? `${NOT_COUNTED} Keep trying or view the solution.`
     : S.checkPending ? `Still checking whether ${esc(S.checkPending.miss)} forces a win; if it does, it isn’t a miss. Keep trying or view the solution.`
     : S.casualWhy === 'unchecked' ? `${UNCHECKED} Keep trying or view the solution.`
-    : S.casualWhy === 'hint' ? 'You used a hint, so this one doesn’t count toward your rating. Keep trying or view the solution.'
+    : S.casualWhy === 'hint' ? 'Not rated: you used a hint. Keep trying or view the solution.'
     // (the server's own answer: a repeat attempt or an out-of-date page is recorded unrated, and it doesn't say which)
-    : S.repeat ? 'It isn’t rated: you’ve played this puzzle before, or this page is out of date. Keep trying or view the solution.'
-    : 'This puzzle now counts as a miss; keep trying or view the solution.';
+    : S.repeat ? 'Not rated: you’ve played this puzzle before, or this page is out of date. Keep trying or view the solution.'
+    : 'It counts as a miss. Keep trying or view the solution.';
   let fbHtml;
   if (notice) {
     $('#feedback').classList.remove('is-loading');
     fbHtml = `<div class="icon bad">!</div><div class="body"><h2>${esc(notice.title)}</h2><p>${esc(notice.body)}</p></div>`;
   } else if (S.checking) {
     fbHtml = `<div class="icon turn p${S.solver}">…</div><div class="body"><h2>Checking ${esc(S.checking)}</h2>
-      <p>That isn’t the puzzle’s line; checking whether it still forces a win.</p></div>${playActions}`;
+      <p>Not the puzzle’s line. Checking whether it still forces a win.</p></div>${playActions}`;
   } else if (S.free) {
     // The free game after a miss (freeplay.js). Hint and Solution stay where they were: they leave it, then act as from
     // the retry position. Nothing it says promises a re-check: the result is in.
@@ -2042,7 +2042,7 @@ function renderFeedback(mood, delta) {
   } else if (S.status === 'retry') {
     // Play on: once the miss is in, a free game from the position after it (freeplay.js freeOffer), on its own line.
     const fe = freeEngine(), E = fe === 'syntaks' ? 'Syntaks' : 'Tiltak';
-    const more = fe ? `<div class="more"><button data-act="free">Play on</button><span>Play on from ${esc(freeFrom(S))} and see how ${E} answers.</span></div>` : '';
+    const more = fe ? `<div class="more"><button data-act="free">Play on</button><span>From ${esc(freeFrom(S))}, against ${E}.</span></div>` : '';
     const fnote = S.freeNote?.n === S.misses.length ? `<span class="po-line">${esc(S.freeNote.text)}</span>` : '';
     fbHtml = `<div class="icon bad">✗</div><div class="body"><h2>That’s not the move<span class="dslot"></span></h2>
       <p>${hintNote}${unsure(S.refutation?.miss) ? '' : (refText(S.refutation) || 'Try another move.') + ' '}${missNote()}${fnote}</p></div>${playActions}${more}`;
@@ -2122,7 +2122,7 @@ function renderInfo(done) {
       ${m.white ? `<div class="players">${player(1, m.white, m.ratingWhite)}${player(2, m.black, m.ratingBlack)}</div>` : ''}
       <hr><div class="tags">${themes.map((t) => `<button type="button" class="tag" data-tag="${t}" aria-expanded="false" aria-controls="tag-def">${THEMES[t].name}</button>`).join('') || '<span class="sub">No themes</span>'}<p id="tag-def" class="tag-def" role="status" hidden></p></div>`;
     // Drawn again only when it changes (renderAll runs often), so an open definition and the keyboard stay where they are.
-    if (info._html === html) return;
+    if (info._html === html) return showTag();
     info.innerHTML = info._html = html;
     const tags = info.querySelector('.tags');
     tags.onclick = (e) => { const b = e.target.closest('[data-tag]'); if (b) { S.tag = S.tag === b.dataset.tag ? null : b.dataset.tag; showTag(); } };
@@ -2143,9 +2143,12 @@ function renderInfo(done) {
 // nothing above it moves.
 function showTag() {
   const t = THEMES[S.tag] ? S.tag : null, def = $('#tag-def');
+  if (!def || (def.dataset.tag || null) === t) return;
+  if (t) def.dataset.tag = t; else delete def.dataset.tag;
   for (const b of document.querySelectorAll('#info [data-tag]')) b.setAttribute('aria-expanded', b.dataset.tag === t);
   def.hidden = !t;
   def.innerHTML = t ? esc(THEMES[t].desc) + practiceLink(t, themeCounts?.[t]) : '';
+  if (t) def.scrollIntoView({ block: 'nearest' }); // (only if it opened past the window's end, or under the phone's dock)
 }
 
 // Move list, Lichess-style: a fixed-height scrolling table (number | White | Black). The game so far is
@@ -2483,7 +2486,7 @@ function renderSyncStatus() {
 }
 
 // ---- the Settings page (#/settings) ----
-// Each setting has one plain line.
+// A setting whose name doesn't say it all has one plain line.
 function settingsPage() {
   // An index.html cached from before this page (a CDN edge can serve one for minutes after a deploy, with this app.js)
   // has no <main> for it: add it where the HTML has it, before the footer.
@@ -2494,21 +2497,20 @@ function settingsPage() {
   show('view-settings');
   const el = $('#view-settings');
   if (!el.firstChild) {
-    const sel = (k, label, desc, extra = '') => `<div class="set-item"><label for="st-${k}">${label}</label><select id="st-${k}" aria-describedby="st-${k}-d"></select>
-      <p class="set-desc" id="st-${k}-d">${desc}</p>${extra}</div>`;
+    const sel = (k, label, desc, extra = '') => `<div class="set-item"><label for="st-${k}">${label}</label><select id="st-${k}"${desc ? ` aria-describedby="st-${k}-d"` : ''}></select>
+      ${desc ? `<p class="set-desc" id="st-${k}-d">${desc}</p>` : ''}${extra}</div>`;
     el.innerHTML = `<h1>Settings</h1><p class="set-status" id="st-status" role="status"></p>
       <div class="panel set-list">
         <p class="set-desc set-note hidden" id="st-note"></p>
-        <div class="set-item"><label for="st-ninja-theme">Board theme</label><select id="st-ninja-theme" aria-describedby="st-ninja-theme-d">
-          <option value="">tinue felt</option><option value="legacy">tinue classic</option>${NINJA_THEMES.map((id) => `<option value="${id}">${themeName(id)}</option>`).join('')}<option value="custom" hidden>Custom</option></select>
-          <p class="set-desc" id="st-ninja-theme-d">The board’s colours. A theme of your own can be pasted below.</p></div>
+        <div class="set-item"><label for="st-ninja-theme">Board theme</label><select id="st-ninja-theme">
+          <option value="">tinue felt</option><option value="legacy">tinue classic</option>${NINJA_THEMES.map((id) => `<option value="${id}">${themeName(id)}</option>`).join('')}<option value="custom" hidden>Custom</option></select></div>
         <div class="set-item"><label for="st-ninja">Board look</label>
           <form id="st-ninja-form" class="set-look"><input id="st-ninja" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="st-ninja-d st-ninja-msg" placeholder="A theme’s code, or &amp;axisLabels=false&amp;theme=zen">
             <button type="submit" id="st-ninja-use">Use</button><button type="button" id="st-ninja-clear">Clear</button></form>
           <p class="set-desc" id="st-ninja-d"></p><p class="set-desc set-msg" id="st-ninja-msg" aria-live="polite"></p></div>
-        ${sel('confirm', 'Confirm moves', 'A move waits on the board until you confirm it: press Confirm or Enter.')}
-        ${sel('sound', 'Sound', 'The sound of stones as they are played. Light, Thunk and Deep are different stones.', window.TINUE_BETA ? '<p class="set-desc"><a href="#/sounds" id="sound-lab-link">Sound lab</a></p>' : '')}
-      </div><p><a href="#/">Back to puzzles</a></p>`;
+        ${sel('confirm', 'Confirm moves', 'A move waits until you press Confirm or Enter.')}
+        ${sel('sound', 'Sound', '', window.TINUE_BETA ? '<p class="set-desc"><a href="#/sounds" id="sound-lab-link">Sound lab</a></p>' : '')}
+      </div>`;
     for (const k of Object.keys(CTL)) {
       const s = $('#st-' + k);
       for (const [v, t] of CTL[k].opts) s.append(new Option(t, v));
@@ -2538,7 +2540,7 @@ function renderLookField(fresh = false) {
   th.querySelector('[value="custom"]').hidden = cur !== 'custom'; // (shown only while a pasted theme is in use)
   th.value = cur;
   $('#st-ninja-clear').disabled = !prefs.ninja;
-  $('#st-ninja-d').textContent = 'A theme’s code from PTN Ninja’s theme editor, or settings as in a ptn.ninja link: axis labels, counts, layout, 3D.';
+  $('#st-ninja-d').textContent = 'A theme’s code from PTN Ninja’s theme editor, or a ptn.ninja link’s settings.';
   if (document.activeElement !== inp) inp.value = showLook(prefs.ninja || '');
   if (fresh) $('#st-ninja-msg').textContent = prefs.ninja ? lookReport(parseLook(prefs.ninja)) : '';
 }
@@ -2653,15 +2655,66 @@ function show(id) {
 const practiceLink = (k, n) => `<span class="gap"> </span><a href="#/" class="practice" data-theme="${k}">Practice${n ? ` (${n.toLocaleString()})` : ''}</a>`;
 // A page the server didn't give (no answer, or an error's): said in its place.
 const pageError = (el, title) => { el.innerHTML = `<h1>${title}</h1><div class="panel"><p class="flush">Can’t reach the puzzle server. Check your connection and reload.</p></div>`; };
-// History's Change and When cells, in the words the rest of the site uses: the puzzle page's signs (a real minus),
-// "unrated" (never "casual"), and Rush's short dates ("Today, 2:41 PM": no seconds, which wrapped on phones).
-const histChange = (r) => r.refund && !Math.round(r.user_delta) ? '<span class="muted">0</span>' // a refund's change is its net effect, often nothing
-  : r.rated ? `<span class="delta ${r.user_delta >= 0 ? 'up' : 'down'}">${signed(r.user_delta)}</span>` : '<span class="muted">unrated</span>';
-const histWhen = (t, now = Date.now()) => { try { return whenText(t, now); } catch { return new Date(t).toLocaleString(); } };
+// History's cells, in the words the rest of the site uses: the puzzle page's signs (a real minus), "unrated" (never
+// "casual"), "refunded" for a miss later counted as solved (its change is its net effect, often nothing), the length as
+// the themes name it, and the day over its puzzles' times.
+const histChange = (r) => r.refund && !Math.round(r.user_delta) ? '<span class="muted" title="Refunded: counted as solved">refunded</span>'
+  : !r.rated ? '<span class="muted">unrated</span>'
+  : `${r.refund ? '<span class="muted" title="Refunded: counted as solved">refunded</span> ' : ''}<span class="delta ${r.user_delta >= 0 ? 'up' : 'down'}">${signed(r.user_delta)}</span>`;
+const histLength = (r) => `${String(r.themes || '').split(',').includes('gaelet') ? 'Flat win' : 'Road'} in ${(r.plies + 1) >> 1}`;
+const histDay = (t, now = Date.now(), locale = undefined) => {
+  const d = new Date(t), n = new Date(now), day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const ago = Math.round((day(n) - day(d)) / 864e5); // (whole days, also across a DST change)
+  return ago === 0 ? 'Today' : ago === 1 ? 'Yesterday' : d.toLocaleDateString(locale, { month: 'short', day: 'numeric', ...(d.getFullYear() !== n.getFullYear() ? { year: 'numeric' } : {}) });
+};
+const histTime = (t, locale = undefined) => new Date(t).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+// The rating chart's points, oldest first: where the rating stood before the first rated puzzle here, after each, and now
+// if it is elsewhere (a refund moved it). None without a rated puzzle.
+const chartPoints = (h, rating) => {
+  const rated = h.filter((r) => r.rated).reverse();
+  if (!rated.length) return [];
+  const pts = [{ v: rated[0].user_rating, t: rated[0].ts }, ...rated.map((r) => ({ v: r.user_rating + r.user_delta, t: r.ts, r }))];
+  if (Math.abs(pts.at(-1).v - rating) > 0.5) pts.push({ v: rating, t: pts.at(-1).t });
+  return pts;
+};
+// The chart's ratings from bottom to top, and the round numbers its lines are drawn at (two to five of them).
+const chartScale = (vs) => {
+  const min = Math.min(...vs), max = Math.max(...vs), pad = Math.max(10, (max - min) * 0.08), lo = min - pad, hi = max + pad;
+  const step = [10, 20, 50, 100, 200, 500, 1000].find((s) => (hi - lo) / s < 5) || 2000, ticks = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+  return { lo, hi, ticks };
+};
+function ratingChart(pts) {
+  const { lo, hi, ticks } = chartScale(pts.map((p) => p.v)), n = pts.length - 1;
+  const x = (i) => (i / n) * 100, y = (v) => 100 - ((v - lo) / (hi - lo)) * 100;
+  const dates = [...new Set(n > 30 ? [0, n >> 1, n] : [0, n])].map((i) => histDay(pts[i].t)).filter((d, i, a) => !i || d !== a[i - 1]);
+  return `<div class="chart"><div class="plot" role="img" aria-label="Your rating, from ${Math.round(pts[0].v)} to ${Math.round(pts[n].v)}">
+    ${ticks.map((t) => `<i class="grid" style="top:${y(t).toFixed(2)}%"><span>${t}</span></i>`).join('')}
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(3)},${y(p.v).toFixed(3)}`).join('')}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>
+    <b class="plot-dot" hidden></b><span class="plot-tip" hidden></span></div>
+    <div class="plot-dates">${dates.map((d) => `<span>${esc(d)}</span>`).join('')}</div></div>`;
+}
+// The point under the pointer (a finger's stays until it touches elsewhere): its rating, the change and the day.
+function chartPointer(plot, pts) {
+  const { lo, hi } = chartScale(pts.map((p) => p.v)), n = pts.length - 1, dot = plot.querySelector('.plot-dot'), tip = plot.querySelector('.plot-tip');
+  const at = (e) => {
+    const b = plot.getBoundingClientRect(), i = Math.max(0, Math.min(n, Math.round(((e.clientX - b.left) / b.width) * n))), p = pts[i];
+    const x = (i / n) * 100, y = 100 - ((p.v - lo) / (hi - lo)) * 100;
+    tip.innerHTML = `<b>${Math.round(p.v)}</b> ${p.r ? histChange(p.r) + ' ' : ''}${esc(histDay(p.t))}`;
+    dot.hidden = tip.hidden = false;
+    dot.style.left = x + '%'; dot.style.top = y + '%';
+    const px = (x / 100) * b.width, w = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(b.width - w, px - w / 2)) + 'px';
+    tip.style.top = y > 40 ? `calc(${y}% - 40px)` : `calc(${y}% + 12px)`;
+  };
+  const off = () => { dot.hidden = tip.hidden = true; };
+  plot.onpointermove = plot.onpointerdown = at;
+  plot.onpointerleave = (e) => { if (e.pointerType === 'mouse') off(); };
+}
 async function mePage() {
   show('view-me');
   const el = $('#view-me');
-  const claim = 'Claim a username at the top right to be on the leaderboard and to sign in on other devices.';
+  const claim = 'Claim a username (top right) to join the leaderboard and sign in on other devices.';
   if (!me) { el.innerHTML = `<h1>History</h1><div class="panel"><p class="flush">Your puzzles will show up here. ${claim}</p></div>`; return; }
   // (me fresh too: another tab may have played since this one loaded, and the chart ends at me.rating)
   const [got, fresh] = await Promise.all([api('/api/history').catch(() => null), api(withBuild('/api/me')).catch(() => null)]);
@@ -2669,27 +2722,32 @@ async function mePage() {
   const h = got?.history;
   if (!Array.isArray(h)) return pageError(el, 'History');
   const tok = me.name ? token : null; // a guest has no name to sign in as elsewhere: claiming one comes first
-  // rating chart
-  const rated = h.filter((r) => r.rated).reverse();
-  const pts = rated.length ? [rated[0].user_rating, ...rated.map((r) => r.user_rating + r.user_delta)] : [me.rating];
-  if (Math.abs(pts.at(-1) - me.rating) > 0.5) pts.push(me.rating); // ends at the rating shown above (a refund moves it)
-  const W = 860, H = 160, lo = Math.min(...pts) - 20, hi = Math.max(...pts) + 20;
-  const path = pts.map((v, i) => `${i ? 'L' : 'M'}${(i / Math.max(1, pts.length - 1)) * W},${H - ((v - lo) / (hi - lo)) * H}`).join('');
-  el.innerHTML = `<h1>${me.name ? esc(me.name) : 'History'}</h1>${me.name ? '' : `<div class="panel"><p class="flush">You’re playing as a guest: this browser remembers you. ${claim}</p></div>`}<p class="muted">Rating <b class="your-rating">${fmtRating(me.rating, me.provisional)}</b></p>
-    <p class="muted">${me.games} rated puzzle${me.games === 1 ? '' : 's'}, ${me.wins} solved first try.${tok ? ' Your login token (paste on another device):' : ''}</p>
-    ${tok ? `<div class="token"><input id="token-out" readonly value="${esc(tok)}" aria-label="Login token"><button id="token-copy">Copy</button></div>` : ''}
-    <div class="chart"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="#3692e7" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></div>
-    <table class="t hist"><tr><th>Puzzle</th><th>Result</th><th>Puzzle rating</th><th>Change</th><th>When</th></tr>
-    ${h.map((r) => `<tr><td><a href="#/puzzle/${esc(r.puzzle_id)}">#${esc(r.puzzle_id)}</a> <span class="muted">${r.size}×${r.size}, ${r.plies} ${r.plies === 1 ? 'ply' : 'plies'}</span></td>
-      <td>${r.win ? '✓' : '✗'}${r.refund ? ' <span class="muted" title="Refunded: counted as solved">refunded</span>' : ''}</td><td>${Math.round(r.puzzle_rating)}</td>
-      <td>${histChange(r)}</td><td class="muted">${esc(histWhen(r.ts))}</td></tr>`).join('')}</table>`;
-  const out = $('#token-out');
-  if (out) {
+  const pts = chartPoints(h, me.rating);
+  let day = null;
+  const row = (r) => {
+    const d = histDay(r.ts), head = d === day ? '' : `<tr class="day"><th colspan="5" scope="colgroup">${esc(d)}</th></tr>`;
+    day = d;
+    return `${head}<tr><td class="res ${r.win ? 'good' : 'bad'}"><span aria-hidden="true">${r.win ? '✓' : '✗'}</span><span class="sr-only">${r.win ? 'Solved' : 'Missed'}</span></td>
+      <td><a href="#/puzzle/${esc(r.puzzle_id)}">#${esc(r.puzzle_id)}</a> <span class="muted">${r.size}×${r.size}, ${histLength(r)}</span></td>
+      <td class="num">${Math.round(r.puzzle_rating)}</td><td class="num">${histChange(r)}</td><td class="num muted">${esc(histTime(r.ts))}</td></tr>`;
+  };
+  el.innerHTML = `<h1>History</h1>${me.name ? '' : `<div class="panel guest-note"><p class="flush">You’re a guest, remembered by this browser. ${claim}</p></div>`}
+    <p class="hist-sum"><b class="your-rating">${fmtRating(me.rating, me.provisional)}</b> <span class="muted">${me.games} rated puzzle${me.games === 1 ? '' : 's'}, ${me.wins} solved first try</span></p>
+    ${pts.length ? ratingChart(pts) : ''}
+    ${tok ? `<div class="token"><span class="muted">Login token, to sign in on another device</span><button type="button" id="token-show" aria-expanded="false" aria-controls="token-out">Show</button><button type="button" id="token-copy">Copy</button><input id="token-out" class="hidden" readonly aria-label="Login token"></div>` : ''}
+    ${h.length ? `<table class="t hist"><thead><tr><th><span class="sr-only">Result</span></th><th>Puzzle</th><th class="num">Rating</th><th class="num">Change</th><th class="num">Time</th></tr></thead>
+    <tbody>${h.map(row).join('')}</tbody></table>${h.length === 200 ? '<p class="muted page-note">The last 200 puzzles.</p>' : ''}` : '<p class="muted">No puzzles yet.</p>'}`;
+  if (pts.length) chartPointer(el.querySelector('.plot'), pts);
+  if (tok) {
+    // The token is on the page only while it is shown (or selected for a copy the clipboard refused).
+    const out = $('#token-out'), btn = $('#token-show');
+    const reveal = (on) => { out.value = on ? tok : ''; out.classList.toggle('hidden', !on); btn.textContent = on ? 'Hide' : 'Show'; btn.setAttribute('aria-expanded', on); };
     out.onfocus = () => out.select();
-    $('#token-copy').onclick = async () => {
-      out.select();
-      try { await navigator.clipboard.writeText(tok); } catch { document.execCommand?.('copy'); }
-      $('#token-copy').textContent = 'Copied';
+    btn.onclick = () => reveal(out.classList.contains('hidden'));
+    $('#token-copy').onclick = async (e) => {
+      let ok = true;
+      try { await navigator.clipboard.writeText(tok); } catch { reveal(true); out.select(); ok = !!document.execCommand?.('copy'); }
+      e.target.textContent = ok ? 'Copied' : 'Copy';
     };
   }
 }
@@ -2698,10 +2756,11 @@ async function leaderPage() {
   show('view-leaderboard');
   const leaders = (await api('/api/leaderboard').catch(() => null))?.leaders;
   if (!Array.isArray(leaders)) return pageError($('#view-leaderboard'), 'Leaderboard');
-  $('#view-leaderboard').innerHTML = `<h1>Leaderboard</h1><p class="muted">A “?” means the rating is still provisional: it settles after about 15 rated puzzles.</p>` + (leaders.length
-    ? `<table class="t"><tr><th>#</th><th>Player</th><th>Rating</th><th>Puzzles</th></tr>${leaders.map((l, i) =>
-      `<tr><td>${i + 1}</td><td>${esc(l.name)}</td><td>${fmtRating(l.rating, l.provisional)}</td><td>${l.games}</td></tr>`).join('')}</table>`
-    : `<div class="panel"><p class="flush">Nobody is on the leaderboard yet. Claim a username, solve a puzzle and you could be first.</p></div>`);
+  const mine = (l) => !!me?.name && l.name === me.name;
+  $('#view-leaderboard').innerHTML = `<h1>Leaderboard</h1>` + (leaders.length
+    ? `${leaders.some((l) => l.provisional) ? '<p class="set-status">A “?” rating is provisional: it settles after about 15 rated puzzles.</p>' : ''}<table class="t lead"><thead><tr><th class="num">#</th><th>Player</th><th class="num">Rating</th><th class="num">Puzzles</th></tr></thead><tbody>${leaders.map((l, i) =>
+      `<tr${mine(l) ? ' class="you"' : ''}><td class="num muted">${i + 1}</td><td class="who">${esc(l.name)}${mine(l) ? ' <em>you</em>' : ''}</td><td class="num">${fmtRating(l.rating, l.provisional)}</td><td class="num">${l.games}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="panel"><p class="flush">Nobody yet. Claim a username and play a rated puzzle.</p></div>`);
 }
 
 // Hash routes (#/, #/puzzle/ID, #/me, #/leaderboard, #/rush, #/settings) so it works as static files.
