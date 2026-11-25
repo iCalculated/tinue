@@ -61,7 +61,7 @@ X
 id tinue >/dev/null 2>&1 || run useradd --system --user-group --home-dir /nonexistent --shell /usr/sbin/nologin tinue
 id tinue-build >/dev/null 2>&1 || run useradd --system --user-group --create-home --home-dir /var/lib/tinue-build --shell /bin/sh tinue-build # compiles the engine; no sudo
 id mover >/dev/null 2>&1 || run useradd --create-home --user-group --shell /bin/sh mover
-dir 755 root root /srv/tinue; dir 755 "$LOGIN" "$LOGIN" /srv/tinue/deploy
+dir 755 "$LOGIN" "$LOGIN" /srv/tinue-page; dir 755 root root /srv/tinue; dir 755 "$LOGIN" "$LOGIN" /srv/tinue/deploy
 dir 700 tinue tinue /var/lib/tinue; dir 700 mover mover /var/lib/tinue-in; dir 750 root mover /var/lib/tinue-out
 dir 2750 tinue mover /var/lib/tinue-backup; dir 755 root root /var/lib/tinue-gate; dir 750 root tinue /etc/tinue
 [ -L /srv/tinue/data ] || run ln -s /var/lib/tinue /srv/tinue/data

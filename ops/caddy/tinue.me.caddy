@@ -1,0 +1,40 @@
+# The page (ops/page.sh puts it there) and the beta beside it. Addresses as GitHub Pages serves them: /puzzle/<id> is
+# /puzzle/<id>.html, an unknown one is 404.html.
+(page) {
+	encode zstd gzip
+	@stamped query v=*
+	@fresh path */ *.html */version.json
+	route {
+		header Cache-Control "public, max-age=600"
+		header @stamped Cache-Control "public, max-age=86400"
+		header @fresh Cache-Control "no-cache"
+	}
+	try_files {path} {path}.html {path}/index.html
+	file_server
+}
+
+tinue.me {
+	import tls
+	redir /beta /beta/
+	handle_path /beta/* {
+		root * /srv/tinue-page/beta
+		import page
+	}
+	handle {
+		root * /srv/tinue-page/site
+		import page
+	}
+	handle_errors {
+		@missing expression {err.status_code} == 404
+		handle @missing {
+			root * /srv/tinue-page/site
+			rewrite * /404.html
+			file_server
+		}
+	}
+}
+
+www.tinue.me {
+	import tls
+	redir https://tinue.me{uri} 301
+}

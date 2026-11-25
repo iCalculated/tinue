@@ -1,0 +1,4 @@
+stats.tinue.me {
+	import tls
+	import proxy 127.0.0.1:8792
+}

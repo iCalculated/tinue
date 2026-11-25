@@ -11,6 +11,7 @@
 #   PAGES=<dir> ... tinue   the build for its own domain (build-static.sh DOMAIN): <dir> is a plain checkout of this
 #     project's repository holding the build ($SITE/tinue with its own .git: the build keeps it). Committed on the tip of
 #     `site` and pushed; GitHub Pages serves that branch itself. No pointer anywhere is touched.
+#     With TINUE_HOST that host then serves it (ops/page.sh). tinue-beta the same way: PAGES=<checkout of branch beta>.
 #   tinue-moved   the handoff page (build-moved.sh) in the submodule $SITE/tinue: branch `moved`, then the pointer. By hand.
 # Anything else in $SITE is left alone: only <name> is committed.
 set -e
@@ -22,16 +23,17 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 NAME="${1:-tinue}"; MSG="${2:-$NAME}"
 case "$NAME" in tinue) BRANCH=site ;; tinue-beta) BRANCH=beta ;; tinue-moved) BRANCH=moved; NAME=tinue ;; *) echo "publish-site: $NAME is none of tinue, tinue-beta, tinue-moved" >&2; exit 2 ;; esac
-if [ -n "$PAGES" ] && [ "$BRANCH" = site ]; then
+if [ -n "$PAGES" ] && [ "$BRANCH" != moved ]; then
   [ -e "$PAGES/.git" ] && [ -z "$(git -C "$PAGES" rev-parse --show-superproject-working-tree)" ] || { echo "publish-site: PAGES=$PAGES is not a checkout of its own" >&2; exit 2; }
   if [ -n "$DRY" ]; then echo "[dry-run] git -C $PAGES fetch, reset --soft origin/$BRANCH, add -A, commit -m '$MSG'${PUSH:+, push origin HEAD:$BRANCH}"; exit 0; fi
-  [ -s "$PAGES/index.html" ] && [ -s "$PAGES/version.json" ] && [ -s "$PAGES/CNAME" ] || { echo "publish-site: $PAGES is not a finished build for its own domain; nothing published" >&2; exit 1; }
+  [ -s "$PAGES/index.html" ] && [ -s "$PAGES/version.json" ] && { [ "$BRANCH" = beta ] || [ -s "$PAGES/CNAME" ]; } || { echo "publish-site: $PAGES is not a finished build for its own domain; nothing published" >&2; exit 1; }
   git -C "$PAGES" fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
   git -C "$PAGES" reset -q --soft "origin/$BRANCH"
   git -C "$PAGES" add -A
   if git -C "$PAGES" diff --cached --quiet; then echo "publish-site: the build is unchanged; nothing to commit on $BRANCH"
   else git -C "$PAGES" commit -q -m "$MSG" && echo "publish-site: committed $(git -C "$PAGES" rev-parse --short HEAD) on $BRANCH"; fi
-  if [ -n "$PUSH" ]; then git -C "$PAGES" push -q origin "HEAD:refs/heads/$BRANCH" && echo "publish-site: pushed; Pages serves it in a few minutes"
+  if [ -n "$PUSH" ]; then git -C "$PAGES" push -q origin "HEAD:refs/heads/$BRANCH"; echo "publish-site: pushed"
+    [ -z "$TINUE_HOST" ] || ${PAGE_SSH:-ssh} "$TINUE_HOST" "sh /srv/tinue/ops/page.sh $BRANCH" # (that host serves it; GitHub Pages is the spare)
   else echo "publish-site: not pushed (--no-push)"; fi
   exit 0
 fi
