@@ -1,7 +1,7 @@
 import { Game } from './shared/tak.js';
 import { unplayedPlies } from './shared/ptn.js';
 import { syntaksBoard } from './shared/judge.js';
-import { THEMES, GLOSSARY } from './shared/themes.js';
+import { THEMES } from './shared/themes.js';
 import { provisional, PLAYER_START } from './shared/rating.js';
 import { buildPTN, focusedByPointer, hooks } from './board-kit.js';
 import { NinjaBoard } from './ninja.js';
@@ -2111,21 +2111,41 @@ function renderInfo(done) {
     // not a game that reached this position, so say so before naming its players.
     const off = unplayedPlies(m);
     const from = off ? `a line from this ${p.sourceRef?.startsWith('http') ? game : `${esc(p.source)} game`}` : game;
-    info.innerHTML = `<dl>
+    const html = `<dl>
         <dt>Puzzle</dt><dd><a href="#/puzzle/${esc(p.id)}${p.sym ? '/' + p.sym : ''}">#${esc(p.id)}</a>, ${p.size}×${p.size}${p.komi ? ` with komi ${p.komi}` : ''}${canShare() ? ' · <button class="link" id="share-link">Share</button>' : ''}${ANALYSIS ? ' · <a data-ninja target="_blank" rel="noopener" title="Open this line in PTN Ninja">PTN Ninja ↗</a>' : ''}</dd>
         <dt>Rating</dt><dd>${Math.round(p.rating)}</dd>
-        <dt>Played</dt><dd>${p.attempts ? `${p.attempts} time${p.attempts === 1 ? '' : 's'}` : 'Not rated by anyone yet'}</dd>
+        <dt>Played</dt><dd>${p.attempts ? `${p.attempts} time${p.attempts === 1 ? '' : 's'}` : 'Not yet'}</dd>
         <dt>From</dt><dd>${from}</dd>
       </dl>${off ? `
       <div class="sub">${off === 1 ? 'The last move before the puzzle was' : `The last ${off} moves before the puzzle were`} not played in the game.</div>` : ''}
       ${p.turn === 1 ? `<div class="sub">Turning point: ${p.pre0 != null && p.pre0 < 0.4 ? 'you were behind' : 'the game was even'} until your opponent’s last move.</div>` : ''}
       ${m.white ? `<div class="players">${player(1, m.white, m.ratingWhite)}${player(2, m.black, m.ratingBlack)}</div>` : ''}
-      <hr><div>${themes.map((t) => `<a class="tag" href="#/glossary/${t}" title="${esc(THEMES[t].desc)}">${THEMES[t].name}</a>`).join('') || '<span class="sub">No themes</span>'}</div>`;
+      <hr><div class="tags">${themes.map((t) => `<button type="button" class="tag" data-tag="${t}" aria-expanded="false" aria-controls="tag-def">${THEMES[t].name}</button>`).join('') || '<span class="sub">No themes</span>'}<p id="tag-def" class="tag-def" role="status" hidden></p></div>`;
+    // Drawn again only when it changes (renderAll runs often), so an open definition and the keyboard stay where they are.
+    if (info._html === html) return;
+    info.innerHTML = info._html = html;
+    const tags = info.querySelector('.tags');
+    tags.onclick = (e) => { const b = e.target.closest('[data-tag]'); if (b) { S.tag = S.tag === b.dataset.tag ? null : b.dataset.tag; showTag(); } };
+    tags.onkeydown = (e) => {
+      if (e.key !== 'Escape' || !S.tag) return;
+      const b = info.querySelector(`[data-tag="${S.tag}"]`);
+      S.tag = null; showTag(); b.focus();
+    };
+    showTag();
     const sb = $('#share-link');
     if (sb) sb.onclick = () => sharePuzzle(p);
     loadLz(); // (for the ↗ by the step buttons)
   }
 
+}
+
+// The finished puzzle's tag whose definition is open (S.tag; one at a time), with its Practice link. Below the tags, so
+// nothing above it moves.
+function showTag() {
+  const t = THEMES[S.tag] ? S.tag : null, def = $('#tag-def');
+  for (const b of document.querySelectorAll('#info [data-tag]')) b.setAttribute('aria-expanded', b.dataset.tag === t);
+  def.hidden = !t;
+  def.innerHTML = t ? esc(THEMES[t].desc) + practiceLink(t, themeCounts?.[t]) : '';
 }
 
 // Move list, Lichess-style: a fixed-height scrolling table (number | White | Black). The game so far is
@@ -2334,7 +2354,7 @@ $('#feedback').addEventListener('click', async (e) => {
     if (kb) $('#ptn-in')?.focus();
   }
 });
-const themeDesc = () => { $('#theme-desc').textContent = prefs.theme && THEMES[prefs.theme] ? THEMES[prefs.theme].desc + (THEMES[prefs.theme].fullWeight ? ' These count in full for your rating.' : ' Knowing the theme is a hint, so wins here barely raise your rating.') : 'A mix of everything. You don’t know what’s coming, just like in a real game.'; };
+const themeDesc = () => { $('#theme-desc').textContent = prefs.theme && THEMES[prefs.theme] ? THEMES[prefs.theme].desc + (THEMES[prefs.theme].fullWeight ? ' These count in full for your rating.' : ' The theme is a hint, so wins barely raise your rating.') : ''; };
 $('#difficulty').value = prefs.difficulty;
 // A filter changed with the mouse lets go of focus, or number keys meant for the board would go to it (on Board size,
 // 4–8 even pick a size). Changed from the keyboard, it keeps focus.
@@ -2591,9 +2611,11 @@ const typedOk = (e) => { e.target.removeAttribute('aria-invalid'); $('#ptn-err')
 $('#ptn-in').addEventListener('input', typedOk);
 $('#ptn-in').addEventListener('blur', typedOk);
 
+let themeCounts = null; // puzzles per theme at the chosen board size, as the Theme menu last had them
 async function renderFilters() {
   const t = await api('/api/themes' + (prefs.size ? '?size=' + prefs.size : ''));
   if (!t?.sizes || !t.themes) return; // (an error's answer: the menus stay as they are)
+  themeCounts = t.themes;
   const sel = $('#size');
   sel.innerHTML = '<option value="">Any size</option>' + Object.keys(t.sizes).sort().map((s) => `<option value="${s}">${s}×${s} (${t.sizes[s]})</option>`).join('');
   sel.value = prefs.size || '';
@@ -2612,7 +2634,7 @@ document.addEventListener('click', (e) => {
 });
 
 // ---------- pages ----------
-const TITLES = { 'view-glossary': 'Glossary', 'view-me': 'History', 'view-leaderboard': 'Leaderboard', 'view-rush': 'Rush', 'view-sounds': 'Sound lab', 'view-settings': 'Settings' };
+const TITLES = { 'view-me': 'History', 'view-leaderboard': 'Leaderboard', 'view-rush': 'Rush', 'view-sounds': 'Sound lab', 'view-settings': 'Settings' };
 function setTitle() {
   const page = Object.keys(TITLES).find((v) => $('#' + v) && !$('#' + v).classList.contains('hidden'));
   document.title = page ? `${TITLES[page]} — tinue` : S && !S.placeholder ? `Puzzle #${S.p.id} — tinue` : 'tinue — Tak puzzles';
@@ -2626,32 +2648,11 @@ function show(id) {
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.getAttribute('href') === (location.hash.replace(/^(#\/[a-z]*).*$/, '$1') || '#/').replace('#/puzzle', '#/'));
 }
 
-// A theme's Practice link: the count alone (no "1 puzzles"), never split across lines. The gap before it is a space
-// (widened in CSS), not a margin, so a link that wraps to a new line starts at its edge instead of indented.
-const practiceLink = (k, n) => `<span class="gap"> </span><a href="#/" class="practice" data-theme="${k}">Practice (${n.toLocaleString()})</a>`;
+// A theme's Practice link: the count alone (no "1 puzzles"; not known yet: none), never split across lines. The gap before
+// it is a space (widened in CSS), not a margin, so a link that wraps to a new line starts at its edge instead of indented.
+const practiceLink = (k, n) => `<span class="gap"> </span><a href="#/" class="practice" data-theme="${k}">Practice${n ? ` (${n.toLocaleString()})` : ''}</a>`;
 // A page the server didn't give (no answer, or an error's): said in its place.
-const pageError = (el, title) => { el.innerHTML = `<h1>${title}</h1><div class="panel"><p class="flush">Can’t reach the puzzle server. Check your connection and reload. If it keeps happening, the server may be down.</p></div>`; };
-async function glossaryPage() {
-  show('view-glossary');
-  const slug = (w) => w.toLowerCase().replace(/[^a-z]+/g, '-');
-  const themeRows = Object.entries(THEMES).filter(([k, v]) => v.group !== 'Board').map(([k, v]) =>
-    `<dt id="${k}">${v.name}</dt><dd>${esc(v.desc)}<span data-count="${k}"></span></dd>`).join('');
-  $('#view-glossary').innerHTML = `<div class="glossary"><h1>Glossary</h1>
-    <h2>Tak basics</h2><dl>${GLOSSARY.map(([w, d]) => `<dt id="${slug(w)}">${w}</dt><dd>${esc(d)}</dd>`).join('')}</dl>
-    <h2>Puzzle themes</h2><p class="muted">Every puzzle is tagged automatically from its solution. You can drill one theme from the Theme menu on the puzzle page.</p>
-    <dl>${themeRows}</dl></div>`;
-  const anchor = location.hash.split('/')[2], term = anchor && document.getElementById(anchor);
-  term?.scrollIntoView({ block: 'center' });
-  const y = scrollY;
-  // The words are the page's own; the Practice links join them once the counts (for the Board you practice on) are here,
-  // and make the list longer: the term goes back to the middle, unless the player has scrolled since (or left: then it has no place).
-  const spots = [...document.querySelectorAll('#view-glossary [data-count]')];
-  const t = await api('/api/themes' + (prefs.size ? '?size=' + prefs.size : '')).catch(() => null);
-  const still = scrollY === y;
-  for (const el of spots) { const n = t?.themes?.[el.dataset.count]; if (n) el.outerHTML = practiceLink(el.dataset.count, n); }
-  if (still) term?.scrollIntoView({ block: 'center' });
-}
-
+const pageError = (el, title) => { el.innerHTML = `<h1>${title}</h1><div class="panel"><p class="flush">Can’t reach the puzzle server. Check your connection and reload.</p></div>`; };
 // History's Change and When cells, in the words the rest of the site uses: the puzzle page's signs (a real minus),
 // "unrated" (never "casual"), and Rush's short dates ("Today, 2:41 PM": no seconds, which wrapped on phones).
 const histChange = (r) => r.refund && !Math.round(r.user_delta) ? '<span class="muted">0</span>' // a refund's change is its net effect, often nothing
@@ -2703,7 +2704,7 @@ async function leaderPage() {
     : `<div class="panel"><p class="flush">Nobody is on the leaderboard yet. Claim a username, solve a puzzle and you could be first.</p></div>`);
 }
 
-// Hash routes (#/, #/puzzle/ID, #/glossary[/term], #/me, #/leaderboard, #/rush, #/settings) so it works as static files.
+// Hash routes (#/, #/puzzle/ID, #/me, #/leaderboard, #/rush, #/settings) so it works as static files.
 let rushPage = null; // rush.js, once #/rush has been visited
 let labPage = null; // sound-lab.js, once #/sounds has been visited (beta builds)
 function go(hash) {
@@ -2720,8 +2721,8 @@ async function route() {
   let look = null; try { look = JSON.parse(sessionStorage.getItem('tinue.lookFrom')); sessionStorage.removeItem('tinue.lookFrom'); } catch {}
   if (page !== 'rush') rushPage?.leave(); // a run in progress ends unposted (rush.js)
   if (page !== 'sounds') labPage?.leave(); // the lab's previews stop and its own audio context closes
-  if (page === 'glossary' || page === 'me' || page === 'leaderboard' || page === 'rush' || page === 'settings') showHashURL('#/' + (location.hash || '#/' + pathRoute).split('/').slice(1).join('/'));
-  if (page === 'glossary') return glossaryPage();
+  if (page === 'me' || page === 'leaderboard' || page === 'rush' || page === 'settings') showHashURL('#/' + (location.hash || '#/' + pathRoute).split('/').slice(1).join('/'));
+  if (page === 'glossary') showHashURL('#/'); // (the Glossary page, until 2026-11-24: its old links land on the puzzle)
   if (page === 'me') return mePage();
   if (page === 'leaderboard') return leaderPage();
   if (page === 'settings') return settingsPage();

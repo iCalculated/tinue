@@ -59,8 +59,6 @@ select { appearance: none; -webkit-appearance: none; padding-right: 28px; backgr
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field > span { font-size: var(--fs-xs); color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .field select { width: 100%; }
-.help { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font: 600 10px/1 system-ui, sans-serif; }
-.help:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- header: logo, plain nav, one quiet control ---------- */
 .top { display: flex; align-items: center; gap: 28px; padding: 0 24px; height: 56px; background: var(--bg2); border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -142,12 +140,18 @@ button.danger { background: var(--bad-fill); border-color: var(--bad-fill); colo
 
 .your-rating { color: var(--gold); font-weight: 700; }
 .tag { display: inline-block; font-size: var(--fs-xs); background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; margin: 2px 4px 2px 0; color: var(--fg); }
-a.tag:hover { border-color: var(--accent); color: var(--fg-hi); }
+button.tag { height: auto; font-weight: 400; }
+button.tag:hover, button.tag[aria-expanded="true"] { border-color: var(--accent); color: var(--fg-hi); background: var(--bg3); }
+.tag-def { margin: 8px 0 0; color: var(--fg); }
+.tag-def .practice { font-size: var(--fs-xs); white-space: nowrap; }
+.tag-def .gap { word-spacing: 8px; } /* (the space before Practice: dropped at a line break, as a margin isn't) */
+@media (pointer: coarse) { button.tag { padding: 7px 12px; border-radius: 17px; } }
 .delta.up { color: var(--good); }
 .delta.down { color: var(--bad); }
 
 .controls { display: flex; flex-direction: column; gap: 12px; }
 .controls .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.theme-desc:empty { display: none; }
 .theme-desc { margin: -4px 0 0; color: var(--muted); font-size: var(--fs-xs); }
 /* Under the filters, the way to the Settings page (Board, PTN Ninja look, Confirm moves live only there). */
 .controls .set-link { margin: 0; font-size: var(--fs-xs); }
@@ -289,11 +293,6 @@ table.t { width: 100%; border-collapse: collapse; background: var(--bg2); border
 table.t th, table.t td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); }
 table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
 .chart { background: var(--bg2); border-radius: var(--r-panel); padding: 12px; margin-bottom: 16px; }
-.glossary dl { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 10px 20px; background: var(--bg2); border-radius: var(--r-panel); padding: var(--pad) 20px; }
-.glossary dt { color: var(--fg-hi); font-weight: 600; }
-.glossary dd { margin: 0; }
-.glossary dd .practice { font-size: var(--fs-xs); white-space: nowrap; }
-.glossary dd .gap { word-spacing: 8px; } /* (the space before Practice: dropped at a line break, as a margin isn't) */
 .flush { margin: 0; }
 .page .panel { margin-top: 8px; }
 .credits { max-width: 640px; margin: 40px auto 0; padding: 16px 16px 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--fs-xs); line-height: 1.6; text-align: center; text-wrap: balance; }
@@ -358,9 +357,7 @@ table.t th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
 }
 @media (max-width: 600px) {
   .top nav { order: 3; width: 100%; } /* brand + account on the first row, nav on the second */
-  .top nav { gap: 16px; } /* five links fit 375 px with room to spare */
-  .glossary dl { grid-template-columns: 1fr; gap: 2px 0; }
-  .glossary dd { margin-bottom: 10px; }
+  .top nav { gap: 16px; } /* four links fit 375 px with room to spare */
 }
 @media (pointer: coarse) {
   .top nav a { padding: 6px 0; }
