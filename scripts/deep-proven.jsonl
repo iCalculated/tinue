@@ -1,0 +1,69 @@
+# Deep tinuë (theme key 'deep', shared/themes.js): long 6x6 puzzles whose stored first move(s) are the only first moves
+# a deep proof search found to force a road within the puzzle's length. What is on record for every row: the stored
+# first move is proven to force a road in exactly L plies (L = plies), it equals the solver's key, and the search over
+# every other first move found none that forces a road as fast. rootUndecided is the certifier's own count of other
+# first moves it neither refuted nor found to win within its budget (12 rows have 0).
+# rootProof (2026-11-20) closes those: every legal first move other than the key (5,803 over the 49 rows; `moves` on a
+# row) was searched as its own position with `deep prove and=1`, with threats only (q=0) and with one quiet attacker
+# move allowed (q=1). Each came back "disproved" both ways: noWinAnyDepth of a row's moves have no forced road at any
+# depth in that model (searched without a depth limit), noWinWithinL have none within the puzzle's length (p = L-1;
+# a slower win is not excluded for these). slowerWins: first moves that do force a road, but more slowly (found at
+# q=0 without a depth limit; other slower wins may exist). The run: crux:~/tinue-hard100/runs/deep-proof (summary.txt).
+# What is still not on record: lines needing two or more quiet attacker moves after the first move are never searched,
+# and a quiet move counts only when it passes the solver's pass test. Other first moves may still win more slowly.
+# One {id, plies, key, proof: {tier, L}, rootUndecided, date, rootProof, flaggedRootAlt?} per line. key: the proven first move(s),
+# equal to the stored tree's root moves. tier is about the solver's own line, which differs from the stored line on
+# most rows: gold = no second winning idea found at its nodes with 7 or more plies left; silver = a second idea wins
+# at such a later node. The first-move result is the same for both.
+# flaggedRootAlt: root moves that are NOT proven wins but beat the engine defender in 3 of 3 play-outs.
+# From the mining pilot of 2026-11-19 (50 candidates; pd654193 is left out: production rejects it as grade D).
+# scripts/tag-deep.mjs puts the tag on these ids in the normalized puzzle files; re-run it after regenerating one.
+{"id":"pd91325","plies":11,"key":["Cb1"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":87,"noWinAnyDepth":87,"noWinWithinL":0}}
+{"id":"pd113142","plies":11,"key":["c2>"],"proof":{"tier":"gold","L":11},"rootUndecided":31,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":89,"noWinAnyDepth":68,"noWinWithinL":21}}
+{"id":"pd98548","plies":11,"key":["d4<"],"proof":{"tier":"gold","L":11},"rootUndecided":4,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":77,"noWinAnyDepth":76,"noWinWithinL":1}}
+{"id":"pd419911","plies":11,"key":["3e5>"],"proof":{"tier":"gold","L":11},"rootUndecided":37,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":126,"noWinAnyDepth":101,"noWinWithinL":25}}
+{"id":"pd826887","plies":11,"key":["Cb6"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":88,"noWinAnyDepth":88,"noWinWithinL":0}}
+{"id":"pd118062","plies":11,"key":["c5>"],"proof":{"tier":"gold","L":11},"rootUndecided":25,"date":"2026-11-19","flaggedRootAlt":["a3","b6"],"rootProof":{"date":"2026-11-20","moves":187,"noWinAnyDepth":172,"noWinWithinL":15}}
+{"id":"ps759571","plies":11,"key":["3c2-"],"proof":{"tier":"gold","L":11},"rootUndecided":4,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":107,"noWinAnyDepth":106,"noWinWithinL":1}}
+{"id":"pd658845","plies":11,"key":["6c4>213"],"proof":{"tier":"gold","L":11},"rootUndecided":12,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":251,"noWinAnyDepth":231,"noWinWithinL":20,"slowerWins":["5c4>113"]}}
+{"id":"pd827499","plies":11,"key":["c4+"],"proof":{"tier":"gold","L":11},"rootUndecided":34,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":60,"noWinAnyDepth":31,"noWinWithinL":29}}
+{"id":"pd593030","plies":11,"key":["b4>"],"proof":{"tier":"gold","L":11},"rootUndecided":3,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":84,"noWinAnyDepth":84,"noWinWithinL":0}}
+{"id":"pd282718","plies":15,"key":["f3-"],"proof":{"tier":"gold","L":15},"rootUndecided":4,"date":"2026-11-19","flaggedRootAlt":["Sa5"],"rootProof":{"date":"2026-11-20","moves":79,"noWinAnyDepth":77,"noWinWithinL":2}}
+{"id":"pd448743","plies":15,"key":["e3-"],"proof":{"tier":"gold","L":15},"rootUndecided":3,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":83,"noWinAnyDepth":82,"noWinWithinL":1}}
+{"id":"pd427637","plies":13,"key":["c4+"],"proof":{"tier":"gold","L":13},"rootUndecided":39,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":108,"noWinAnyDepth":106,"noWinWithinL":2}}
+{"id":"pd590275","plies":11,"key":["3d5<12","2d5<11","3d5<21"],"proof":{"tier":"gold","L":11},"rootUndecided":2,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":95,"noWinAnyDepth":95,"noWinWithinL":0}}
+{"id":"pd239716","plies":15,"key":["5b3-32"],"proof":{"tier":"gold","L":15},"rootUndecided":10,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":96,"noWinAnyDepth":90,"noWinWithinL":6}}
+{"id":"ps877057","plies":11,"key":["Cb6"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":90,"noWinAnyDepth":89,"noWinWithinL":1}}
+{"id":"pd378438","plies":11,"key":["2b2>"],"proof":{"tier":"gold","L":11},"rootUndecided":1,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":98,"noWinAnyDepth":98,"noWinWithinL":0}}
+{"id":"pd643203","plies":11,"key":["e5"],"proof":{"tier":"gold","L":11},"rootUndecided":28,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":101,"noWinAnyDepth":98,"noWinWithinL":3}}
+{"id":"pd626946","plies":11,"key":["b4<"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":93,"noWinAnyDepth":93,"noWinWithinL":0}}
+{"id":"pd587934","plies":15,"key":["f3-"],"proof":{"tier":"gold","L":15},"rootUndecided":17,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":145,"noWinAnyDepth":137,"noWinWithinL":8,"slowerWins":["2f3-11"]}}
+{"id":"ps348518","plies":11,"key":["d3"],"proof":{"tier":"gold","L":11},"rootUndecided":13,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":122,"noWinAnyDepth":119,"noWinWithinL":3}}
+{"id":"pd564415","plies":13,"key":["b5"],"proof":{"tier":"gold","L":13},"rootUndecided":11,"date":"2026-11-19","flaggedRootAlt":["e4","3b4-"],"rootProof":{"date":"2026-11-20","moves":132,"noWinAnyDepth":131,"noWinWithinL":1}}
+{"id":"pd699762","plies":11,"key":["3d2+21"],"proof":{"tier":"gold","L":11},"rootUndecided":5,"date":"2026-11-19","flaggedRootAlt":["d5"],"rootProof":{"date":"2026-11-20","moves":73,"noWinAnyDepth":71,"noWinWithinL":2}}
+{"id":"pd654266","plies":11,"key":["c4+"],"proof":{"tier":"gold","L":11},"rootUndecided":17,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":146,"noWinAnyDepth":144,"noWinWithinL":2}}
+{"id":"ps803546","plies":11,"key":["c2<"],"proof":{"tier":"gold","L":11},"rootUndecided":14,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":138,"noWinAnyDepth":133,"noWinWithinL":5}}
+{"id":"ps423645","plies":11,"key":["d5"],"proof":{"tier":"gold","L":11},"rootUndecided":116,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":258,"noWinAnyDepth":204,"noWinWithinL":54}}
+{"id":"pd167369","plies":11,"key":["4b6-22"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":127,"noWinAnyDepth":127,"noWinWithinL":0}}
+{"id":"pd522942","plies":11,"key":["f5<"],"proof":{"tier":"gold","L":11},"rootUndecided":70,"date":"2026-11-19","flaggedRootAlt":["d3-"],"rootProof":{"date":"2026-11-20","moves":141,"noWinAnyDepth":74,"noWinWithinL":67}}
+{"id":"ps879728","plies":13,"key":["e2"],"proof":{"tier":"gold","L":13},"rootUndecided":3,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":67,"noWinAnyDepth":67,"noWinWithinL":0}}
+{"id":"ps584348","plies":11,"key":["3e4+12"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":89,"noWinAnyDepth":89,"noWinWithinL":0}}
+{"id":"pd447810","plies":11,"key":["b2>"],"proof":{"tier":"gold","L":11},"rootUndecided":1,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":106,"noWinAnyDepth":106,"noWinWithinL":0}}
+{"id":"pd607888","plies":15,"key":["d4"],"proof":{"tier":"gold","L":15},"rootUndecided":66,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":232,"noWinAnyDepth":183,"noWinWithinL":49}}
+{"id":"ps424442","plies":11,"key":["2c6>"],"proof":{"tier":"gold","L":11},"rootUndecided":70,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":184,"noWinAnyDepth":156,"noWinWithinL":28}}
+{"id":"ps652740","plies":13,"key":["f3"],"proof":{"tier":"gold","L":13},"rootUndecided":10,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":126,"noWinAnyDepth":123,"noWinWithinL":3}}
+{"id":"pd597245","plies":11,"key":["5d4>"],"proof":{"tier":"gold","L":11},"rootUndecided":1,"date":"2026-11-19","flaggedRootAlt":["a5"],"rootProof":{"date":"2026-11-20","moves":169,"noWinAnyDepth":163,"noWinWithinL":6}}
+{"id":"ps880319","plies":13,"key":["c3-"],"proof":{"tier":"gold","L":13},"rootUndecided":1,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":172,"noWinAnyDepth":171,"noWinWithinL":1}}
+{"id":"pd870586","plies":15,"key":["a5"],"proof":{"tier":"gold","L":15},"rootUndecided":2,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":94,"noWinAnyDepth":94,"noWinWithinL":0}}
+{"id":"pd415190","plies":13,"key":["2e6<"],"proof":{"tier":"gold","L":13},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":149,"noWinAnyDepth":149,"noWinWithinL":0}}
+{"id":"pd175499","plies":15,"key":["b2"],"proof":{"tier":"gold","L":15},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":106,"noWinAnyDepth":106,"noWinWithinL":0}}
+{"id":"pd445099","plies":11,"key":["d6"],"proof":{"tier":"gold","L":11},"rootUndecided":18,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":286,"noWinAnyDepth":282,"noWinWithinL":4}}
+{"id":"ps752825","plies":11,"key":["Ca2"],"proof":{"tier":"gold","L":11},"rootUndecided":1,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":91,"noWinAnyDepth":90,"noWinWithinL":1}}
+{"id":"ps549826","plies":11,"key":["e3>"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":66,"noWinAnyDepth":66,"noWinWithinL":0}}
+{"id":"pd475596","plies":11,"key":["Ca5"],"proof":{"tier":"gold","L":11},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":88,"noWinAnyDepth":88,"noWinWithinL":0}}
+{"id":"pd802266","plies":11,"key":["f3<"],"proof":{"tier":"gold","L":11},"rootUndecided":43,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":101,"noWinAnyDepth":70,"noWinWithinL":31}}
+{"id":"pd610756","plies":11,"key":["2e3<11"],"proof":{"tier":"gold","L":11},"rootUndecided":2,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":83,"noWinAnyDepth":80,"noWinWithinL":3}}
+{"id":"pd848827","plies":15,"key":["2a2+11"],"proof":{"tier":"silver","L":15},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":91,"noWinAnyDepth":91,"noWinWithinL":0}}
+{"id":"pd377175","plies":15,"key":["d1"],"proof":{"tier":"silver","L":15},"rootUndecided":24,"date":"2026-11-19","flaggedRootAlt":["d2"],"rootProof":{"date":"2026-11-20","moves":72,"noWinAnyDepth":63,"noWinWithinL":9}}
+{"id":"pd377809","plies":15,"key":["a1"],"proof":{"tier":"silver","L":15},"rootUndecided":0,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":86,"noWinAnyDepth":86,"noWinWithinL":0}}
+{"id":"pd562490","plies":15,"key":["b6"],"proof":{"tier":"silver","L":15},"rootUndecided":7,"date":"2026-11-19","rootProof":{"date":"2026-11-20","moves":64,"noWinAnyDepth":63,"noWinWithinL":1}}

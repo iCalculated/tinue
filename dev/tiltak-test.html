@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiltak test</title>
+<style>
+  :root { --bg: #f7f7f5; --fg: #1d1d1b; --mut: #6b6b66; --line: #ddd9d0; --card: #fff; --w: #e9e4d8; --b: #2b2b2b; --acc: #2f6f5e; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecebe6; --mut: #9a9992; --line: #33322f; --card: #1e1e1c; --acc: #6cc3a8; --bad: #f2827a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.sub { color: var(--mut); margin: 0 0 16px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  button, select, input { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+  button { cursor: pointer; } button:hover { border-color: var(--acc); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+  .card.on { border-color: var(--acc); }
+  .head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .tps { font: 12px ui-monospace, monospace; color: var(--mut); word-break: break-all; }
+  .bar { height: 10px; border-radius: 5px; background: var(--b); overflow: hidden; margin: 8px 0 6px; }
+  .bar > i { display: block; height: 100%; background: var(--w); transition: width .2s; width: 50%; }
+  .stats { font: 12px ui-monospace, monospace; display: flex; gap: 14px; flex-wrap: wrap; }
+  .pv { font: 13px ui-monospace, monospace; margin-top: 4px; word-break: break-word; }
+  .err { color: var(--bad); }
+  .mut { color: var(--mut); }
+  table { border-collapse: collapse; font: 12px ui-monospace, monospace; width: 100%; }
+  td, th { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tiltak test</h1>
+  <p class="sub">Tiltak (Morten Lohne, GPL-3.0) as WASM in a worker. Scores are from White's side: bar = White's expected score.
+    <span id="boot" class="mut">booting…</span></p>
+  <div class="row">
+    <label>ms <input id="ms" type="number" value="1500" min="50" step="250" style="width:90px"></label>
+    <button id="all">Run all</button>
+    <button id="stop">Stop</button>
+    <button id="bench">Benchmark (3 s each)</button>
+    <button id="probe">Probe sizes / komi</button>
+  </div>
+  <div id="list"></div>
+  <div class="card scroll" id="out" hidden></div>
+</main>
+<script type="module">
+import { analyze, stop, warmup, terminate, SUPPORTED } from '../tiltak.js';
+
+// From data/puzzles/playtak-{4,5,6}.jsonl (first / mid entries), plus one 7x7 to show the refusal.
+const POS = [
+  { id: 'p873585', size: 4, komi: 0, tps: '1,1,1,2S/1,x,1,x/x,1,2,x/212S,2,2,2 1 9', sol: 'd3' },
+  { id: 'p880518', size: 5, komi: 0, tps: '2,x,2,2C,x/x5/21C,121222,1,1,1/x5/x3,1,x 2 13', sol: '4b3+31 Sc4 e5' },
+  { id: 'p879800', size: 5, komi: 0, tps: 'x3,2S,x/2,2,x,1,2S/x,2,x,1,1/1C,1,x,1,x/x,2,x,1,x 1 8', sol: 'c2' },
+  { id: 'p877382', size: 5, komi: 0, tps: '2,2,x3/x,2,2,x2/x2,2,2C,x/111,1C,1S,x2/x5 2 7', sol: 'e3' },
+  { id: 'p880457', size: 6, komi: 2, tps: '1,x4,2/x,2,2,1,2,x/1,2,2C,1,2,x/2,12S,1,1C,1,1/2,1,1,x3/2,1,x4 1 13', sol: 'd6' },
+  { id: 'p873618', size: 6, komi: 2, tps: '2,x,2,2,1,x/2,2,2,1,1,x/1,1,2121S,1C,1,x/x,2,x,1212C,1,1/x2,2,x,2S,2S/x2,2,1,x,1 1 19', sol: '2c4-' },
+  { id: 'p858611', size: 6, komi: 2.5, tps: '2,x4,1/2,1,112,1,12,x/x,121C,1,1,12,1/2,1,2,2,2,2/1,1,x4/x6 1 17', sol: 'b1 a3> 2b4- Sb6 …' },
+  { id: 'p875446', size: 7, komi: 0, tps: '1,x6/1,x2,1,x3/2,2,x4,21/2,2,2,212,21,212,x/1,x5,2/1,x6/21,1,x5 2 16', sol: '2d4> Sg4 2f4-' },
+  { id: 'finished', size: 5, komi: 0, tps: 'x5/x5/x5/2,2,2,2,x/1,1,1,1,1 2 6', sol: '(White already has a road: must be refused, not crash)' },
+];
+
+const $ = (s, el = document) => el.querySelector(s);
+const list = $('#list');
+const cards = POS.map((p) => {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `<div class="head"><b>${p.id} · ${p.size}x${p.size} · komi ${p.komi} · ${p.tps.split(' ')[1] === '1' ? 'White' : 'Black'} to move</b>
+    <button>Analyze</button></div>
+    <div class="tps">${p.tps}</div><div class="mut" style="font-size:12px">puzzle line: ${p.sol}</div>
+    <div class="bar"><i></i></div><div class="stats"></div><div class="pv"></div>`;
+  $('button', el).onclick = () => run(p, el);
+  list.append(el);
+  return el;
+});
+
+function paint(el, r, extra = '') {
+  $('.bar > i', el).style.width = (r.winProb * 100).toFixed(1) + '%';
+  $('.stats', el).innerHTML = `<span>White ${r.scoreCp > 0 ? '+' : ''}${r.scoreCp}</span><span>p(W) ${(r.winProb * 100).toFixed(1)}%</span>
+    <span>depth ${r.depth}/${r.seldepth}</span><span>${r.nodes.toLocaleString()} nodes</span><span>${Math.round(r.nps).toLocaleString()} n/s</span>
+    <span>${r.timeMs} ms</span>${r.komiApprox ? `<span class="err">komi→${r.komiUsed}</span>` : ''}${extra}`;
+  $('.pv', el).textContent = r.pv.join(' ');
+}
+
+async function run(p, el, ms = +$('#ms').value) {
+  cards.forEach((c) => c.classList.remove('on'));
+  el.classList.add('on');
+  $('.pv', el).classList.remove('err');
+  const t0 = performance.now();
+  let tFirst = null;
+  try {
+    const r = await analyze({ ...p, ms, onInfo: (r) => { tFirst ??= performance.now() - t0; paint(el, r); } });
+    if (r) paint(el, r, `<span>first info ${tFirst?.toFixed(0)} ms</span><span>best ${r.bestmove}${r.stopped ? ' (stopped)' : ''}</span>`);
+    return r && { ...r, tFirst, wall: performance.now() - t0 };
+  } catch (e) {
+    $('.stats', el).textContent = '';
+    $('.pv', el).classList.add('err');
+    $('.pv', el).textContent = e.message;
+    return { error: e.message };
+  }
+}
+
+$('#all').onclick = async () => { for (let i = 0; i < POS.length; i++) await run(POS[i], cards[i]); };
+$('#stop').onclick = () => stop();
+
+function table(rows, cols) {
+  const out = $('#out');
+  out.hidden = false;
+  out.innerHTML = `<table><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr>${rows.map((r) => `<tr>${cols.map((c) => `<td>${r[c] ?? ''}</td>`).join('')}</tr>`).join('')}</table>`;
+}
+
+$('#bench').onclick = async () => {
+  const rows = [];
+  for (let i = 0; i < POS.length; i++) {
+    const r = await run(POS[i], cards[i], 3000);
+    rows.push({ id: POS[i].id, size: POS[i].size, nodes: r.nodes, 'n/s': r.nps && Math.round(r.nps), 'first info ms': r.tFirst?.toFixed(0), 'wall ms': r.wall?.toFixed(0), cp: r.scoreCp, best: r.bestmove, err: r.error });
+    table(rows, ['id', 'size', 'nodes', 'n/s', 'first info ms', 'wall ms', 'cp', 'best', 'err']);
+  }
+  window.benchRows = rows;
+};
+
+// Talk to fresh raw workers to see what this build actually accepts (each probe gets its own worker,
+// because an unsupported size/komi panics the engine).
+function rawProbe(lines, waitMs = 2500) {
+  return new Promise((resolve) => {
+    const w = new Worker(new URL('../tiltak/worker.js', import.meta.url), { type: 'module' });
+    const seen = [];
+    const done = (status) => { w.terminate(); resolve({ status, seen }); };
+    w.onmessage = ({ data }) => {
+      if (data.type === 'ready') { w.postMessage({ type: 'debug', on: true }); lines.forEach((line) => w.postMessage({ type: 'raw', line })); }
+      if (data.type === 'line' && !data.line.startsWith('>')) { seen.push(data.line); if (data.line.startsWith('bestmove')) done('ok'); }
+      if (data.type === 'crashed') { seen.push(data.message.split('\n')[0]); done('panic'); }
+    };
+    setTimeout(() => done('timeout'), waitMs);
+  });
+}
+const EMPTY = { 4: 'x4/x4/x4/x4 1 1', 5: 'x5/x5/x5/x5/x5 1 1', 6: 'x6/x6/x6/x6/x6/x6 1 1', 7: 'x7/x7/x7/x7/x7/x7/x7 1 1', 8: 'x8/x8/x8/x8/x8/x8/x8/x8 1 1' };
+$('#probe').onclick = async () => {
+  const rows = [];
+  const show = () => table(rows, ['probe', 'status', 'last output']);
+  for (const s of [4, 5, 6, 7, 8]) {
+    const r = await rawProbe([`teinewgame ${s}`, `position tps ${EMPTY[s]}`, 'go movetime 300']);
+    rows.push({ probe: `size ${s}`, status: r.status, 'last output': r.seen.at(-1) }); show();
+  }
+  for (const hk of [-4, 0, 1, 3, 4, 5, 10, 11]) {
+    const r = await rawProbe(['teinewgame 6', `setoption name HalfKomi value ${hk}`, `position tps ${EMPTY[6]}`, 'go movetime 300']);
+    rows.push({ probe: `6x6 HalfKomi ${hk} (komi ${hk / 2})`, status: r.status, 'last output': r.seen.at(-1) }); show();
+  }
+  window.probeRows = rows;
+};
+
+warmup().then((ms) => { $('#boot').textContent = `engine ready in ${ms.toFixed(0)} ms · sizes ${SUPPORTED.sizes.join('/')} · komi ${SUPPORTED.komi.join('/')}`; },
+  (e) => { $('#boot').textContent = e.message; $('#boot').className = 'err'; });
+window.tiltak = { analyze, stop, terminate };
+</script>
+</body>
+</html>

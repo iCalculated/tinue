@@ -1,0 +1,105 @@
+<!doctype html>
+<!-- A local stand-in for PTN Ninja's embed (ptn.ninja in an iframe), for tinue's headless tests: the e2e serves it in
+     place of https://ptn.ninja/ (DevTools request interception), so a test never needs the network. It is written from
+     PTN Ninja's documented embed API and what tinue sees of it (scripts/e2e-rush-ninja.mjs), not from its code: the
+     messages tinue sends and the ones it answers with (GAME_STATE whenever the position changes, INSERT_PLY for a move
+     made on its board, SET_UI back for a UI setting changed, GET_THEME's reply: the recorded theme of its themeID,
+     scripts/ninja-themes.json, which STANDIN_HOLD_THEME holds back until STANDIN_GIVE_THEME). Its board is a plain 6×6 grid of
+     squares (data-coord, as PTN Ninja's): a tap on an empty square places a flat. Not a Tak board to look at.
+     STANDIN_DIE from the page makes it stop answering. Modes (the e2e puts one in MODE below): ok, never (never comes up), die:N (stops answering for good once N
+     positions have been set), slow:MS (comes up MS late), lag:MS (says it has a position MS late: a slow phone), holdtheme
+     (as ok, but its GET_THEME answers held from the start). -->
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<style>
+  html, body { margin: 0; height: 100%; background: #262421; font: 12px system-ui; color: #ece7db; overflow: hidden; }
+  #wrap { position: absolute; left: 5%; right: 5%; top: 50%; transform: translateY(-50%); }
+  #turn { height: 18px; display: flex; } #turn i { flex: 1; } #turn .w { background: #ece7db; } #turn .b { background: #151b1a; }
+  #turn.p1 .b, #turn.p2 .w { opacity: .3; }
+  #grid { display: grid; grid-template-columns: repeat(6, 1fr); border: 1px solid #8fa9a1; }
+  .square { aspect-ratio: 1; border: 1px solid #8fa9a140; display: grid; place-items: center; background: #4a6761; position: relative; }
+  .square.hl { background: #6a8a80; } .square.last { box-shadow: inset 0 0 0 3px #e3d3a1; }
+  .st { width: 62%; height: 62%; border-radius: 12%; border: 1px solid #9a948a; display: grid; place-items: center; font-size: 10px; }
+  .st.p1 { background: #ece7db; color: #151b1a; } .st.p2 { background: #151b1a; color: #ece7db; border-color: #5f6b67; }
+  .st.S { width: 22%; } .st.C { border-radius: 50%; }
+  #tray { height: 40px; } body.off #grid { opacity: .92; }
+</style></head>
+<body><div id="wrap"><div id="turn"><i class="w"></i><i class="b"></i></div><div id="grid"></div><div id="tray"></div></div>
+<script type="module">
+import { Game } from '/__tinue/public/shared/tak.js';
+import { parsePTN } from '/__tinue/public/shared/ptn.js';
+const MODE = '__MODE__';
+const parent = window.parent, post = (action, value) => { if (!dead) parent.postMessage(value === undefined ? { action } : { action, value }, '*'); };
+let dead = MODE === 'never', loads = 0, holdTheme = MODE === 'holdtheme', themes = null;
+const held = [];
+fetch('/__tinue/scripts/ninja-themes.json').then((r) => r.json()).then((j) => { themes = j.builtin; }).catch(() => {});
+const dieAfter = /^die:(\d+)$/.exec(MODE)?.[1], lag = +(/^lag:(\d+)$/.exec(MODE)?.[1] || 0);
+const ui = { disableBoard: false }, FILES = 'abcdef';
+let base = new Game(6), plies = [], cur = 0, player = null, hl = [];
+const gameAt = (k) => { const g = base.clone(); for (const p of plies.slice(0, k)) g.apply(g.parseMove(p)); return g; };
+function show() {
+  const g = gameAt(cur), n = g.size, grid = document.getElementById('grid');
+  grid.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+  const last = cur ? plies[cur - 1] : null, lastSq = last && /([a-h][1-8])/.exec(last)?.[1];
+  const tps = g.toTPS().split(' ')[0].split('/');
+  let html = '';
+  for (let r = 0; r < n; r++) {
+    const cells = []; for (const c of tps[r].split(',')) { const m = /^x(\d*)$/.exec(c); if (m) for (let i = 0; i < (+m[1] || 1); i++) cells.push(''); else cells.push(c); }
+    for (let f = 0; f < n; f++) {
+      const name = FILES[f] + (n - r), c = cells[f], top = c ? c.replace(/[SC]$/, '').slice(-1) : '', kind = /[SC]$/.test(c) ? c.slice(-1) : '';
+      html += `<div class="square${hl.includes(name) ? ' hl' : ''}${name === lastSq ? ' last' : ''}" data-coord="${name}">${c ? `<span class="st p${top} ${kind}">${c.replace(/[SC]$/, '').length > 1 ? c.replace(/[SC]$/, '').length : ''}</span>` : ''}</div>`;
+    }
+  }
+  grid.innerHTML = html;
+  document.getElementById('turn').className = 'p' + g.toMove;
+  document.body.classList.toggle('off', !!ui.disableBoard);
+}
+function state() { show(); const g = gameAt(cur), v = { tps: g.toTPS(), plyID: cur - 1, plyIsDone: true, turn: g.toMove, isGameEnd: !!g.result() }; if (lag) setTimeout(() => post('GAME_STATE', v), lag); else post('GAME_STATE', v); }
+function insert(ptn) { // a move made on this board (or sent as INSERT_PLY): played where the board is, reported back
+  const g = gameAt(cur); let mv; try { mv = g.parseMove(ptn); if (!g.legalMoves().some((m) => g.moveToPTN(m) === g.moveToPTN(mv))) return; } catch { return; }
+  plies = [...plies.slice(0, cur), g.moveToPTN(mv)]; cur = plies.length;
+  post('INSERT_PLY', g.moveToPTN(mv)); state();
+}
+addEventListener('message', (e) => {
+  if (e.source !== parent) return;
+  const { action, value } = e.data || {};
+  if (action === 'STANDIN_DIE') { dead = true; return; } // (a test's way to make it stop answering from the page)
+  if (action === 'STANDIN_HOLD_THEME') { holdTheme = true; return; }
+  if (action === 'STANDIN_GIVE_THEME') { holdTheme = false; held.splice(0).forEach((f) => f()); return; }
+  if (dead) return;
+  switch (action) {
+    case 'SET_UI': Object.assign(ui, value); post('SET_UI', value); show(); break;
+    case 'SET_PLAYER': player = value; break;
+    case 'SET_CURRENT_PTN': {
+      const { headers, moves } = parsePTN(value);
+      base = headers.TPS ? Game.fromTPS(headers.TPS, +(headers.Komi || 0)) : new Game(+headers.Size || 6);
+      plies = []; for (const m of moves) { const g = gameAt(plies.length); try { plies.push(g.moveToPTN(g.parseMove(m))); } catch { break; } }
+      cur = 0; state();
+      if (dieAfter && ++loads >= +dieAfter) dead = true;
+      break;
+    }
+    case 'LAST': cur = plies.length; state(); break;
+    case 'FIRST': cur = 0; state(); break;
+    case 'GO_TO_PLY': cur = Math.max(0, Math.min(plies.length, value.plyID + (value.isDone ? 1 : 0))); state(); break;
+    case 'APPEND_PLY': { const g = gameAt(plies.length); plies.push(g.moveToPTN(g.parseMove(value))); cur = plies.length; state(); break; }
+    case 'INSERT_PLY': insert(value); break;
+    case 'HIGHLIGHT_SQUARES': hl = value || []; show(); break;
+    case 'GET_THEME': { // (the theme of its themeID, as PTN Ninja answers: a built-in one's recorded answer; held while a test says so)
+      const send = () => post('GET_THEME', (ui.themeID && themes?.[ui.themeID]?.theme) || { id: 'standin' });
+      if (holdTheme) held.push(send); else send();
+      break;
+    }
+
+  }
+});
+document.getElementById('grid').addEventListener('click', (e) => {
+  const sq = e.target.closest('.square');
+  if (!sq || dead || ui.disableBoard) return;
+  const g = gameAt(cur);
+  if (player != null && g.toMove !== player) return;
+  if (!sq.querySelector('.st')) insert(sq.dataset.coord);
+});
+window.__standin = { die: () => { dead = true; }, tps: () => gameAt(cur).toTPS() };
+show();
+const slow = /^slow:(\d+)$/.exec(MODE)?.[1];
+if (MODE !== 'never') setTimeout(() => { post('SET_UI', { boardSize: { width: innerWidth, height: innerHeight } }); state(); }, +slow || 30);
+</script></body></html>

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Keeps the history from before this repository was public out of it. The public main starts from one fresh commit; the
+# old commits stay on the author's machine (attached for log and blame with git replace --graft, which is never pushed).
+# Merging a branch cut before the move would carry them along: rebase such a branch onto main instead.
+# Turn on: cp scripts/hooks/pre-push .git/hooks/ (copied, not core.hooksPath: an old branch, checked out, has no scripts/hooks).
+OLD=c9f62b7bad6d0162e2bf0704a2abf2d24fc29944
+git cat-file -e "$OLD" 2>/dev/null || exit 0 # a clone without the old history cannot push it
+while read -r lref lsha rref rsha; do
+  case "$lsha" in *[!0]*) ;; *) continue ;; esac # deleting a branch
+  if git --no-replace-objects merge-base --is-ancestor "$OLD" "$lsha"; then
+    echo "pre-push: $lref contains the private history (before the move); not pushed. Rebase it onto main." >&2; exit 1
+  fi
+done

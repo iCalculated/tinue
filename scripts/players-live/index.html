@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tinue players</title>
+<style>
+  /* oxocarbon. Series hues (accent, prior) validated with the dataviz palette checker against each panel surface.
+     --s0..--s11: player line colours, twelve per mode, searched so every pair stays apart for normal colour vision
+     (OKLab ΔE ≥ 15 light, ≥ 16 dark) and none sits near the solved/missed green and red. Twelve hues cannot all stay
+     apart for colour-blind viewers, so every line also has its name at the end and lights up under the pointer. The
+     dark set uses lighter colours than the dataviz lightness band allows, to fit twelve. A thirteenth account reuses
+     the first colour. */
+  :root { color-scheme: light;
+    --bg: #f2f4f8; --panel: #ffffff; --fg: #161616; --muted: #525252; --faint: #8d8d8d; --line: #e0e0e0; --grid: #f0f0f0;
+    --thread: #a8a8a8; --thread-g: #d6d6d6; --accent: #0f62fe; --prior: #d02670; --ok: #198038; --bad: #da1e28; --refund: #8e6a00;
+    --hl: color-mix(in srgb, var(--accent) 8%, transparent); --shadow: 0 6px 24px rgba(22,22,22,.12);
+    --s0: #0f62fe; --s1: #9a3ebe; --s2: #859b26; --s3: #853900; --s4: #fb5a91; --s5: #025884; --s6: #019fc3; --s7: #dc7316; --s8: #df56f8; --s9: #5804d0; --s10: #8c86ff; --s11: #94055e; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark;
+    --bg: #161616; --panel: #1f1f1f; --fg: #f2f4f8; --muted: #a8a8a8; --faint: #6f6f6f; --line: #393939; --grid: #2a2a2a;
+    --thread: #6f6f6f; --thread-g: #3d3d3d; --accent: #4589ff; --prior: #ee5396; --ok: #42be65; --bad: #fa4d56; --refund: #f1c21b;
+    --hl: color-mix(in srgb, var(--accent) 14%, transparent); --shadow: 0 6px 24px rgba(0,0,0,.5);
+    --s0: #4589ff; --s1: #9b536e; --s2: #cabf22; --s3: #fe61f5; --s4: #1f8902; --s5: #3fd1de; --s6: #a030e1; --s7: #fe9a9d; --s8: #c4780b; --s9: #067396; --s10: #b6a8fd; --s11: #dd0098; } }
+  :root[data-theme="dark"] { color-scheme: dark;
+    --bg: #161616; --panel: #1f1f1f; --fg: #f2f4f8; --muted: #a8a8a8; --faint: #6f6f6f; --line: #393939; --grid: #2a2a2a;
+    --thread: #6f6f6f; --thread-g: #3d3d3d; --accent: #4589ff; --prior: #ee5396; --ok: #42be65; --bad: #fa4d56; --refund: #f1c21b;
+    --hl: color-mix(in srgb, var(--accent) 14%, transparent); --shadow: 0 6px 24px rgba(0,0,0,.5);
+    --s0: #4589ff; --s1: #9b536e; --s2: #cabf22; --s3: #fe61f5; --s4: #1f8902; --s5: #3fd1de; --s6: #a030e1; --s7: #fe9a9d; --s8: #c4780b; --s9: #067396; --s10: #b6a8fd; --s11: #dd0098; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); -webkit-text-size-adjust: 100%;
+         font: 14px/1.45 "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+  main { max-width: 1240px; margin: 0 auto; padding: 22px 16px 48px; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  a { color: inherit; text-underline-offset: 2px; text-decoration-color: var(--faint); }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .muted { color: var(--muted); } .faint { color: var(--faint); }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+  h1 a { color: inherit; text-decoration: underline; text-decoration-color: var(--muted); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  #status { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
+  #status i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  #status.stale i { background: var(--bad); } #status.stale { color: var(--bad); }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-width: 0; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+  .note { font-size: 12px; color: var(--muted); margin: 8px 0 0; max-width: 78ch; }
+
+  /* today */
+  #today { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 32px; align-items: start; }
+  .stats { display: grid; grid-template-columns: repeat(4, max-content); gap: 10px 28px; }
+  .stat b { display: block; font-size: 26px; font-weight: 500; line-height: 1.1; letter-spacing: -.02em; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .now h2 { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+  .now ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .now li button { display: inline-flex; align-items: baseline; gap: 8px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; }
+  .now li button:hover, .now li button.on { border-color: var(--accent); background: var(--hl); }
+  .now .who { font-weight: 600; } .now .empty { font-size: 13px; color: var(--muted); }
+  .res { letter-spacing: 1px; font-size: 12px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .rf, .d.rf { color: var(--refund); } .d.gone { text-decoration: line-through; }
+  i.rf { font-style: normal; font-size: 11.5px; margin-left: 4px; } p.rf-note { color: var(--fg); margin-bottom: 0; }
+  @media (max-width: 720px) { #today { grid-template-columns: minmax(0, 1fr); } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat b { font-size: 22px; } }
+
+  /* controls */
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .seg button { font-size: 12px; padding: 4px 10px; color: var(--muted); }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--fg); color: var(--panel); }
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 12px; color: var(--muted); }
+  select { font: inherit; font-size: 12px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; max-width: 46vw; }
+
+  /* charts */
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font-size: 11px; fill: var(--muted); font-family: inherit; }
+  svg .gl { stroke: var(--grid); } svg .ax { stroke: var(--line); } svg .ref { stroke: var(--faint); stroke-dasharray: 3 3; }
+  .rc { touch-action: pan-y; }
+  .rc .ln { fill: none; stroke: var(--thread); stroke-width: 1.5; stroke-linejoin: round; }
+  .rc .guest .ln { stroke: var(--thread-g); stroke-width: 1; }
+  .rc .live .ln { stroke-width: 2.5; } .rc .guest.live .ln { stroke: var(--thread); stroke-width: 1.5; } .rc .lab.live { fill: var(--fg); }
+  .rc .s circle { display: none; } .rc .s circle.end { display: inline; }
+  .rc.spot .s:not(.on), .rc.spot .lab:not(.on), .rc.spot .lead:not(.on), .rc.spot .key:not(.on) { opacity: .2; }
+  .rc .s.on .ln { stroke-width: 3; } .rc .guest.on .ln { stroke: var(--fg); stroke-width: 2; }
+  .rc .s.on circle { display: inline; } .rc .s circle.rf { display: inline; fill: var(--panel); stroke: var(--refund); stroke-width: 2; }
+  svg circle.ok { fill: var(--ok); } svg circle.bad { fill: var(--bad); }
+  .rc circle { stroke: var(--panel); stroke-width: 1.5; }
+  .rc .lab { cursor: pointer; } .rc .lab.on { fill: var(--fg); font-weight: 600; }
+  /* the leader from a line's end to a nudged-apart name is a neutral hairline, never the line's colour or weight:
+     drawn like the line, a slanted leader read as a last-moment rating drop */
+  .rc .lead { stroke: var(--faint); stroke-width: 1; opacity: .5; fill: none; } .rc .lead.on { opacity: 1; }
+  .rc .key { cursor: pointer; }
+  .rc .mark { fill: var(--panel); stroke: var(--fg); stroke-width: 2; pointer-events: none; }
+  .sw { display: inline-block; width: 12px; height: 0; border-top: 2px solid var(--c); vertical-align: middle; margin-right: 6px; }
+  .rc .ring { fill: none; stroke: var(--accent); stroke-width: 2; animation: ring 1.6s ease-out 2; transform-box: fill-box; transform-origin: center; opacity: 0; }
+  @keyframes ring { from { transform: scale(.6); opacity: 1; } to { transform: scale(3); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .rc .ring { animation: none; } }
+  .hov { fill: none; stroke: var(--fg); stroke-width: 1.5; pointer-events: none; }
+  .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px;
+         font-size: 12px; line-height: 1.45; white-space: nowrap; box-shadow: var(--shadow); opacity: 0; z-index: 3; }
+  .tip b { font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 14px; height: 0; border-top: 2px solid; display: inline-block; }
+
+  /* tables */
+  .two { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 12px 5px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:last-child, td:last-child { padding-right: 0; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  th button { color: inherit; font-weight: inherit; }
+  th[aria-sort] button { color: var(--fg); }
+  th[aria-sort="descending"] button::after { content: " ↓"; } th[aria-sort="ascending"] button::after { content: " ↑"; }
+  .num { text-align: right; }
+  td.g { color: var(--muted); }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover td { background: var(--hl); }
+  tr.on td { background: var(--hl); } tr.on td:first-child { box-shadow: inset 2px 0 var(--accent); }
+  tr.new td { animation: flash 3s ease-out; }
+  @keyframes flash { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } to { background: transparent; } }
+  @media (prefers-reduced-motion: reduce) { tr.new td { animation: none; } }
+  .d { color: var(--muted); font-size: 11.5px; margin-left: 5px; }
+  .more { margin-top: 8px; font-size: 12px; color: var(--accent); }
+  td.res-cell { white-space: normal; min-width: 230px; line-height: 1.5; }
+  .who-r { display: inline-block; margin-right: 9px; white-space: nowrap; } .who-r.faint { opacity: .45; } .who-r.g span:nth-child(2) { color: var(--muted); }
+  tr.detail td { background: var(--bg); padding: 10px 8px; }
+
+  /* puzzle ratings */
+  .figs { display: flex; flex-wrap: wrap; gap: 10px 36px; margin: 2px 0 16px; }
+  .fig b { font-size: 26px; font-weight: 500; letter-spacing: -.02em; line-height: 1.1; display: block; }
+  .fig span { font-size: 12px; color: var(--muted); display: block; max-width: 30ch; }
+  .figs .note { flex-basis: 100%; margin: 0; }
+  table.ll { width: auto; max-width: 100%; margin-top: 6px; font-size: 12px; } table.ll td, table.ll th { padding: 2px 12px 2px 0; } table.ll th { white-space: normal; vertical-align: bottom; }
+  .fig { min-width: 0; max-width: 100%; } table.ll tr.muted td { color: var(--muted); }
+  .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px 24px; margin-bottom: 18px; }
+  h3 { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+  /* rush and streak */
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 18px 24px; margin-top: 18px; }
+  .pair > div { min-width: 0; }
+  .ru { touch-action: pan-y; }
+  .ru .run { opacity: var(--o, 1); }
+  .ru .run path { fill: none; stroke: var(--c, var(--thread)); stroke-width: var(--w, 1.5); stroke-linejoin: round; }
+  .ru .run circle.end { fill: var(--c, var(--thread)); stroke: var(--panel); stroke-width: 1.5; }
+  .ru .run circle.miss { fill: var(--bad); stroke: var(--panel); stroke-width: 1; display: none; }
+  .ru .run.top circle.miss, .ru .run.on circle.miss { display: inline; }
+  .ru.spot .run:not(.on) { opacity: .12; } .ru .run.on { opacity: 1; } .ru .run.on path { stroke-width: 3; }
+  .ru .mark { fill: var(--panel); stroke: var(--fg); stroke-width: 2; pointer-events: none; }
+  .th .tc { fill: var(--ok); opacity: .42; } .th .tw { fill: none; stroke: var(--bad); stroke-width: 1.6; stroke-linecap: round; }
+  .th .rib { fill: var(--fg); opacity: .09; } .th .med { fill: none; stroke: var(--fg); stroke-width: 2; stroke-linejoin: round; }
+  .th .medp { fill: var(--fg); stroke: var(--panel); stroke-width: 1.5; } .th .bmed { fill: var(--panel); stroke: var(--bad); stroke-width: 2; }
+  .legend i.dot { width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--c); }
+  .legend i.x { width: auto; border: 0; font-style: normal; color: var(--bad); font-weight: 700; font-size: 14px; line-height: 12px; transform: translateY(-2px); }
+  .legend i.dia { width: 8px; height: 8px; border: 2px solid var(--bad); transform: rotate(45deg); }
+  .seg.sm button { padding: 2px 8px; }
+  .subhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 6px; } .subhead h3 { margin: 0; }
+  .scroll { max-height: 340px; overflow: auto; margin-top: 8px; }
+  .scroll thead th { position: sticky; top: 0; background: var(--panel); box-shadow: 0 1px var(--line); z-index: 1; }
+  .runline { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; } .runline b { color: var(--fg); font-weight: 600; }
+  .strip .bar.ok { fill: var(--ok); } .strip .bar.bad { fill: var(--bad); } .strip .bar.na { fill: var(--faint); }
+  .strip circle.na { fill: var(--faint); } .strip circle { stroke: var(--panel); stroke-width: 1; }
+  .strip .rl { fill: none; stroke: var(--thread); stroke-width: 1.5; } .strip .cb { fill: var(--accent); opacity: .16; } .strip .cl { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+  .strip .cross { stroke: var(--fg); stroke-width: 1; opacity: 0; pointer-events: none; }
+  .tl { display: flex; align-items: flex-start; } .chart .tl svg { width: auto; flex: none; }
+  .hs { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; padding-bottom: 10px; }
+  .tm { touch-action: pan-x pan-y; } .tm.spot .run:not(.on) { opacity: min(var(--o, 1), .4); }
+  .tm .run.left circle.end { fill: var(--panel); stroke: var(--c, var(--thread)); stroke-width: 1.75; }
+  .tm .brk { fill: var(--bg); } .tm .brkt { font-size: 10px; fill: var(--faint); }
+  .tm .rl { paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; } .tm .rl .sc { fill: var(--fg); font-weight: 600; }
+  .legend i.sw { border-top-color: var(--c); margin-right: 0; } .legend button { display: inline-flex; align-items: center; gap: 6px; } .legend button:hover, .legend button.on { color: var(--fg); } .legend button.on { font-weight: 600; }
+  table.mini { font-size: 12px; } table.mini td.res-cell { min-width: 120px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1><a href="https://shydrie.xyz/tinue/" title="tinue, the Tak puzzle trainer">tinue</a> players</h1>
+    <span id="status"><i></i><span>loading…</span></span>
+  </header>
+
+  <section class="panel" id="today" aria-label="Today">
+    <div class="stats" id="stats" title="Days start at midnight in this browser's time zone"></div>
+    <div class="now"><h2>Playing in the last 15 minutes</h2><ul id="now"></ul></div>
+  </section>
+
+  <section class="panel">
+    <div class="head">
+      <h2>Rating over time</h2>
+      <div class="ctl">
+        <div class="seg" id="range" role="group" aria-label="Time range"></div>
+        <label>Pin <select id="pick"><option value="">nobody</option></select></label>
+      </div>
+    </div>
+    <div class="chart" id="chart"></div>
+    <p class="note">Rating after each attempt, held until the next. Each account keeps its colour (twelve, then they repeat); guests are grey. Thicker: played in the last 15 minutes. Point anywhere near a line to light it up, click to pin. Dashed grey: the 1500 start. Guests from before Nov 15 trail one attempt behind. Amber ring: a miss that was refunded later; the line keeps ratings as they were recorded, so the points come back at a later step.</p>
+  </section>
+
+  <div class="two">
+    <section class="panel">
+      <div class="head"><h2>Players</h2><span class="ctl" id="pcount"></span></div>
+      <div class="wrap"><table id="players"><thead></thead><tbody></tbody></table></div>
+      <button class="more" id="pmore" hidden></button>
+    </section>
+    <section class="panel">
+      <div class="head"><h2>Latest attempts</h2></div>
+      <div class="wrap"><table id="recent"><thead><tr>
+        <th>When</th><th>Player</th><th>Puzzle</th><th class="num">Result</th><th class="num">Time</th><th class="num">Rating</th>
+      </tr></thead><tbody></tbody></table></div>
+    </section>
+  </div>
+
+  <section class="panel" id="rush">
+    <div class="head">
+      <h2>Rush and Streak</h2>
+      <div class="ctl"><span id="ru-count"></span><div class="seg" id="ru-mode" role="group" aria-label="Mode"></div></div>
+    </div>
+    <p class="note" id="ru-empty" hidden></p>
+    <div id="ru-body" hidden>
+      <div class="wrap"><table id="ru-players"><thead></thead><tbody></tbody></table></div>
+      <div class="subhead" style="margin-top:18px"><h3>Score against real time</h3><div class="legend" id="ru-time-who" style="margin:0"></div></div>
+      <div class="chart" id="ru-time"></div>
+      <p class="note">Every run on one time axis: each starts again from 0 and steps up when a puzzle is solved, so a flat stretch is time spent on one puzzle (or the clock held for the engine). Only time someone was playing is drawn; a grey band is an idle gap cut out, with its length. Hollow end: left early. Scroll sideways for earlier sessions; point near a line to name it, click to open it below.</p>
+      <div class="pair">
+        <div><h3>Solved against clock time</h3><div class="chart" id="ru-solved"></div>
+          <p class="note">One line per run, in its player's colour; the three latest are strongest and older runs fade. Clock time leaves out the engine's thinking. Point near a line to name it, click to open it below. Red dots (on the latest three and the one under the pointer): mistakes.</p></div>
+        <div><h3>Clock left against real time</h3><div class="chart" id="ru-clock"></div>
+          <p class="note" id="ru-clock-note">The clock falls a second a second, holds while the engine checks a move, steps up at a combo bonus and drops 10 s at a mistake. A run that ends right of 3:00 earned bonus time or waited on the engine.</p></div>
+      </div>
+      <div class="pair">
+        <div><div class="subhead"><h3>Think time against puzzle rating</h3><div class="seg sm" id="ru-think-seg" role="group" aria-label="Which time"></div></div>
+          <div class="chart" id="ru-think"></div>
+          <div class="legend"><span><i class="dot" style="--c:var(--ok)"></i>correct move</span><span><i class="x">×</i>wrong move</span><span><i style="border-color:var(--fg)"></i>median, correct (band: middle half)</span><span><i class="dia"></i>median, wrong</span></div>
+          <p class="note" id="ru-think-note"></p></div>
+        <div><h3>Solve rate against puzzle rating</h3><div class="chart" id="ru-rate"></div>
+          <div class="legend"><span><i class="dot" style="--c:var(--fg)"></i>solved, with 95% range</span><span><i style="border-color:var(--accent)"></i>what the ratings predict</span></div>
+          <p class="note" id="ru-rate-note"></p></div>
+      </div>
+      <div class="pair">
+        <div><h3>Missed against the odds</h3><div class="wrap"><table class="mini" id="ru-missed"><thead></thead><tbody></tbody></table></div></div>
+        <div><h3>Solved against the odds</h3><div class="wrap"><table class="mini" id="ru-beaten"><thead></thead><tbody></tbody></table></div></div>
+      </div>
+      <p class="note">Ranked by how surprising the results were given each player's rating when the run was posted. Faded ✗: a miss from before Nov 19, when a winning move outside the puzzle's line still counted as a mistake. Hover a name for the move played.</p>
+      <div class="pair">
+        <div><h3>Moves off the line</h3><div id="ru-off"></div></div>
+        <div><h3>Play-outs and paused clock</h3><div id="ru-po"></div></div>
+      </div>
+      <div class="subhead" style="margin-top:22px"><h3>One run</h3><label class="ctl">Run <select id="ru-pick"></select></label></div>
+      <p class="runline" id="ru-runline"></p>
+      <div class="chart" id="ru-strip"></div>
+      <div class="wrap scroll" id="ru-run-wrap"><table id="ru-run"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="panel" id="pr">
+    <div class="head"><h2>Puzzle ratings</h2></div>
+    <div class="figs" id="figs"></div>
+    <div class="three">
+      <div><h3>Calibration</h3><div class="chart" id="pr-cal"></div>
+        <div class="legend"><span><i style="border-color:var(--accent)"></i>live ratings</span><span><i style="border-color:var(--prior)"></i>prior only</span></div>
+        <p class="note">Rated attempts in ten equal bins by predicted solve chance. On the diagonal = calibrated; above it = puzzles easier than rated. Both lines use the replayed puzzle rd at the time.</p></div>
+      <div><h3>Where the prior is off</h3><div class="chart" id="pr-off"></div>
+        <p class="note">Offset that best explains settled players' results (rd under 150), taking their rating as right. Left of 0: easier than the prior. Bars: 95%.</p></div>
+      <div><h3>Log-loss, rolling window of 60 rated attempts</h3><div class="chart" id="pr-roll"></div>
+        <div class="legend"><span><i style="border-color:var(--accent)"></i>live ratings</span><span><i style="border-color:var(--prior)"></i>prior only</span><span><i style="border-color:var(--faint);border-top-style:dashed"></i>constant (running solve rate)</span></div>
+        <p class="note">Each point scores the 60 rated attempts up to it. Lower is better. x is attempt order, so busy days take more room. Live and prior use the same replayed puzzle rd; only the rating differs. All rated attempts.</p></div>
+    </div>
+    <div class="head"><h3 style="margin:0">Played puzzles</h3><span class="ctl" id="pr-count"></span></div>
+    <div class="wrap"><table id="puzzles"><thead></thead><tbody></tbody></table></div>
+    <button class="more" id="prmore" hidden></button>
+    <p class="note rf-note" id="pr-refunds" hidden></p>
+    <p class="note">Click a row for its rating path. Who tried it, in order: ✓ solved, ✗ missed; faded ones didn't move the rating (a hint, a newcomer's first puzzle, or a guest from before Nov 15). <span class="rf">↺</span>: refunded, because the move played wins too. It counts as a solve, for the player and the puzzle alike. In a rating path, the refund's own move on the puzzle is a step of its own, at the time it was made. An amber number after the name is how far the puzzle's rating still stands from a refunded miss not yet counted.</p>
+  </section>
+</main>
+
+<script>
+'use strict';
+// ---------- tiny DOM / SVG helpers ----------
+const $ = (q) => document.querySelector(q);
+const NS = 'http://www.w3.org/2000/svg';
+function mk(doc, tag, attrs, kids) {
+  const e = doc ? document.createElementNS(NS, tag) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e[k] = v;
+    else if (k === 'class' && !doc) e.className = v;
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  if (kids) e.append(...[].concat(kids).filter((x) => x != null && x !== false));
+  return e;
+}
+const h = (tag, attrs, kids) => mk(false, tag, attrs, kids);
+const s = (tag, attrs, kids) => mk(true, tag, attrs, kids);
+const lin = (d0, d1, r0, r1) => { const f = (v) => r0 + ((v - d0) / (d1 - d0 || 1)) * (r1 - r0); f.inv = (p) => d0 + ((p - r0) / (r1 - r0)) * (d1 - d0); return f; };
+const R = Math.round;
+const sgn = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(R(v));
+const pct = (v) => `${R(v * 100)}%`;
+const pl = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`; // a count with its noun: 1 run, 2 runs
+const MIN = 60e3, HOUR = 36e5, DAY = 864e5;
+const clock = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const dayOf = (t) => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' });
+const midnight = (t = Date.now()) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return +d; };
+const when = (t) => (t >= midnight() ? clock(t) : `${dayOf(t)}, ${clock(t)}`);
+const ago = (ms) => (ms < 60e3 ? 'just now' : ms < HOUR ? `${R(ms / MIN)} min ago` : ms < DAY ? `${R(ms / HOUR)} h ago` : `${R(ms / DAY)} d ago`);
+const short = (p) => p.replace(/^guest /, 'g:');
+const puzzleUrl = (id) => `https://shydrie.xyz/tinue/puzzle/${id}`;
+const board = (n) => (n ? `${n}×${n}` : '–'); // a puzzle missing from the puzzles table has no size
+
+function nice(lo, hi, n) {
+  const raw = (hi - lo) / n || 1, p = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((k) => k * p).find((v) => v >= raw);
+  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step, ticks = [];
+  for (let v = a; v <= b + step * 1e-6; v += step) ticks.push(+v.toFixed(6));
+  return { lo: a, hi: b, ticks };
+}
+const TSTEPS = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].map((m) => m * MIN);
+function timeTicks(t0, t1, maxN) {
+  const step = TSTEPS.find((st) => (t1 - t0) / st <= maxN) ?? TSTEPS.at(-1);
+  const off = new Date(t0).getTimezoneOffset() * MIN, out = [];
+  for (let t = Math.ceil((t0 - off) / step) * step + off; t <= t1; t += step) {
+    const d = new Date(t), mid = d.getHours() === 0 && d.getMinutes() === 0;
+    out.push({ t, label: step >= DAY || mid ? dayOf(t) : d.toLocaleTimeString([], d.getMinutes() ? { hour: 'numeric', minute: '2-digit' } : { hour: 'numeric' }), mid });
+  }
+  return out;
+}
+const yGrid = (svg, y, ticks, x0, x1, fmt = String) => {
+  for (const v of ticks) {
+    svg.append(s('line', { class: 'gl', x1: x0, x2: x1, y1: y(v), y2: y(v) }));
+    svg.append(s('text', { x: x0 - 6, y: y(v), dy: '0.32em', 'text-anchor': 'end', text: fmt(v) }));
+  }
+};
+
+// Shared hover: nearest point within reach; tip positioned in the chart box.
+function hover(el, svg, W, pts, show, reach = 28) {
+  const tip = h('div', { class: 'tip', role: 'status' }); el.append(tip);
+  const ring = s('circle', { class: 'hov', r: 5.5, opacity: 0 }); svg.append(ring);
+  const hide = () => { tip.style.opacity = 0; ring.setAttribute('opacity', 0); show(null); };
+  const at = (ev) => {
+    const box = svg.getBoundingClientRect(), k = W / box.width, mx = (ev.clientX - box.left) * k, my = (ev.clientY - box.top) * k;
+    let best = null, bd = reach * reach;
+    for (const q of pts) { const d = (q.px - mx) ** 2 + (q.py - my) ** 2; if (d < bd) { bd = d; best = q; } }
+    if (!best) return hide();
+    ring.setAttribute('cx', best.px); ring.setAttribute('cy', best.py); ring.setAttribute('opacity', 1);
+    tip.replaceChildren(...show(best));
+    const tw = tip.offsetWidth, th = tip.offsetHeight, px = best.px / k, py = best.py / k;
+    tip.style.left = `${Math.max(0, px + 14 + tw > el.clientWidth ? px - 14 - tw : px + 14)}px`;
+    tip.style.top = `${Math.max(0, Math.min(py - th / 2, el.clientHeight - th))}px`;
+    tip.style.opacity = 1;
+  };
+  svg.addEventListener('pointermove', at);
+  svg.addEventListener('pointerdown', at);
+  svg.addEventListener('pointerleave', hide);
+  return { tip };
+}
+
+// ---------- state ----------
+const RANGES = { h1: ['1h', HOUR], h6: ['6h', 6 * HOUR], d1: ['24h', DAY], d3: ['3d', 3 * DAY], w1: ['7d', 7 * DAY], all: ['all', 0] };
+const state = { rows: [], accounts: null, slot: new Map(), ptr: null, puzzles: null, etag: null, lastOk: 0, drawn: 0, seen: new Set(),
+  range: 'd1', pick: '', hover: '', psort: { k: 'last', dir: -1 }, allGuests: false,
+  zsort: { k: 'plays', dir: -1 }, zshow: 25, open: '',
+  rush: null, retag: null, rushErr: '', down: '', rmode: 'rush', rthink: 'first', rsel: null, rhover: null };
+try { const r = localStorage.getItem('tp-range'); if (r && RANGES[r]) state.range = r; } catch {}
+try { if (localStorage.getItem('tp-rmode') === 'streak') state.rmode = 'streak'; const v = localStorage.getItem('tp-rthink'); if (v === 'each' || v === 'made') state.rthink = v; } catch {}
+const theme = new URLSearchParams(location.search).get('theme');
+if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
+const key = (r) => `${r.player}|${r.n}`;
+// A player's line look. The slot is the account's place in creation order (from the server), so it never changes
+// when others join or a filter hides someone; the colours simply repeat after HUES accounts.
+const HUES = 12;
+function slots(ps) {
+  const m = new Map((state.accounts || []).map((n, i) => [n, i]));
+  for (const p of ps.filter((q) => q.kind === 'account').sort((a, b) => a.first - b.first)) if (!m.has(p.player)) m.set(p.player, m.size);
+  return m;
+}
+function lookOf(player) { const i = state.slot.get(player); return i == null ? null : { color: `var(--s${i % HUES})` }; }
+const swatch = (player) => { const l = lookOf(player); return l ? h('i', { class: 'sw', style: `--c:${l.color}` }) : null; };
+const span = () => RANGES[state.range][1];
+const tMin = () => (span() ? Date.now() - span() : state.rows[0]?.t ?? Date.now() - DAY);
+
+function players(rows, t0) {
+  const by = new Map();
+  for (const r of rows) { if (!by.has(r.player)) by.set(r.player, []); by.get(r.player).push(r); }
+  const today = midnight();
+  return [...by].map(([player, rs]) => {
+    const last = rs.at(-1), start = rs[0].before ?? 1500;
+    const ratingAt = (t) => { let v = start; for (const r of rs) { if (r.t >= t) break; if (r.after != null) v = r.after; } return v; };
+    const rating = last.after ?? last.before ?? 1500;
+    let best = start; for (const r of rs) if (r.after != null && r.after > best) best = r.after;
+    const solved = rs.reduce((a, r) => a + r.win, 0);
+    return { player, kind: rs[0].kind, rs, attempts: rs.length, solved, rate: solved / rs.length, rating: R(rating), best: R(best), first: rs[0].t, last: last.t,
+      delta: R(rating - ratingAt(t0)), dToday: R(rating - ratingAt(today)) };
+  });
+}
+
+// ---------- today ----------
+function renderToday(ps) {
+  // yesterday = the calendar day before, up to the same clock time, so a partial today meets a partial yesterday
+  const now = Date.now(), t0 = midnight(), rows = state.rows;
+  const back = (t) => { const d = new Date(t); d.setDate(d.getDate() - 1); return +d; };
+  const y0 = back(t0), y1 = Math.min(back(now), t0);
+  const day = (a, b) => { const rs = rows.filter((r) => r.t >= a && r.t < b), who = new Set(rs.map((r) => r.player));
+    return { n: rs.length, solve: rs.length ? rs.reduce((x, r) => x + r.win, 0) / rs.length : null, players: who.size,
+      fresh: ps.filter((p) => p.first >= a && p.first < b).length }; };
+  const td = day(t0, now + 1), yd = day(y0, y1 + 1);
+  const stat = (big, label) => h('div', { class: 'stat' }, [h('b', { text: big }), h('span', { text: label })]);
+  $('#stats').replaceChildren(
+    stat(String(td.n), `${td.n === 1 ? 'attempt' : 'attempts'} today · ${yd.n} yesterday by now`),
+    stat(td.solve == null ? '–' : pct(td.solve), `solved · ${yd.solve == null ? '–' : pct(yd.solve)} yesterday by now`),
+    stat(String(td.players), `${td.players === 1 ? 'player' : 'players'} · ${yd.players} yesterday by now`),
+    stat(String(td.fresh), `new ${td.fresh === 1 ? 'player' : 'players'} · ${yd.fresh} yesterday by now`));
+  const live = ps.filter((p) => now - p.last < 15 * MIN).sort((a, b) => b.last - a.last);
+  const ul = $('#now');
+  if (!live.length) {
+    const last = rows.at(-1);
+    ul.replaceChildren(h('li', { class: 'empty', text: last ? `Nobody right now. Last attempt ${ago(now - last.t)} by ${last.player}.` : 'No attempts yet.' }));
+    return;
+  }
+  ul.replaceChildren(...live.map((p) => h('li', {}, h('button', { class: p.player === state.pick ? 'on' : '', 'aria-pressed': String(p.player === state.pick),
+    title: `${p.player}: ${pl(p.attempts, 'attempt')}, last ${ago(now - p.last)}`, onclick: () => pin(p.player) }, [
+    h('span', { class: 'who' + (p.kind === 'guest' ? ' muted' : '') }, [swatch(p.player), short(p.player)]),
+    h('span', { text: String(p.rating) }),
+    h('span', { class: 'faint', text: p.dToday ? sgn(p.dToday) : '±0' }),
+    h('span', { class: 'res', 'aria-label': 'last results' }, p.rs.slice(-6).map((r) => h('span', { class: r.win ? 'ok' : 'bad', text: r.win ? '✓' : '✗' }))),
+  ]))));
+}
+
+// ---------- rating over time ----------
+function drawRating() {
+  const el = $('#chart'); el.replaceChildren();
+  const now = Date.now(), t0 = tMin(), byP = new Map();
+  for (const r of state.rows) { if (!byP.has(r.player)) byP.set(r.player, []); byP.get(r.player).push(r); }
+  const series = [...byP].map(([player, rs]) => {
+    const pts = []; let prev = rs[0].before ?? 1500;
+    rs.forEach((r, i) => {
+      if (r.t >= t0 && !pts.length) pts.push({ t: i > 0 ? t0 : r.t, y: prev, r: null });
+      if (r.after != null) { if (r.t >= t0) pts.push({ t: r.t, y: r.after, r }); prev = r.after; }
+    });
+    if (pts.length && rs[0].kind === 'account') pts.push({ t: now, y: pts.at(-1).y, r: null });
+    return { player, kind: rs[0].kind, pts };
+  }).filter((x) => x.pts.length);
+  const W = Math.max(300, el.clientWidth), narrow = W < 600, H = narrow ? 300 : 400, m = { t: 12, r: narrow ? 82 : 112, b: 26, l: 40 };
+  const svg = s('svg', { class: 'rc', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Rating over time, one line per player' });
+  el.append(svg);
+  if (!series.length) { svg.append(s('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', text: state.range === 'all' ? 'No attempts yet' : `No attempts in the last ${RANGES[state.range][0]}` })); return; }
+  const x = lin(t0, now, m.l, W - m.r);
+  let lo = Infinity, hi = -Infinity;
+  for (const se of series) for (const q of se.pts) { lo = Math.min(lo, q.y); hi = Math.max(hi, q.y); }
+  const pad = Math.max(25, (hi - lo) * 0.05), yt = nice(lo - pad, hi + pad, narrow ? 4 : 6), y = lin(yt.lo, yt.hi, H - m.b, m.t);
+  yGrid(svg, y, yt.ticks, m.l, W - m.r);
+  for (const tk of timeTicks(t0, now, Math.max(2, Math.floor((W - m.l - m.r) / 90)))) {
+    if (tk.mid) svg.append(s('line', { class: 'ax', x1: x(tk.t), x2: x(tk.t), y1: m.t, y2: H - m.b }));
+    svg.append(s('text', { x: x(tk.t), y: H - 8, 'text-anchor': 'middle', text: tk.label }));
+  }
+  if (1500 > yt.lo && 1500 < yt.hi) svg.append(s('line', { class: 'ref', x1: m.l, x2: W - m.r, y1: y(1500), y2: y(1500) }));
+  // threads: guests underneath, accounts on top; step path because a rating holds until the next attempt
+  const live = new Set(); for (const r of state.rows) if (now - r.t < 15 * MIN) live.add(r.player);
+  const order = series.slice().sort((a, b) => (a.kind === 'account') - (b.kind === 'account') || live.has(a.player) - live.has(b.player));
+  const groups = new Map(), geo = [];
+  const lines = s('g'); svg.append(lines);
+  for (const se of order) {
+    const xs = se.pts.map((q) => x(q.t)), ys = se.pts.map((q) => y(q.y)), look = lookOf(se.player);
+    let d = `M${xs[0].toFixed(1)},${ys[0].toFixed(1)}`;
+    for (let i = 1; i < xs.length; i++) d += `H${xs[i].toFixed(1)}V${ys[i].toFixed(1)}`;
+    const g = s('g', { class: `s ${se.kind}${live.has(se.player) ? ' live' : ''}`, 'data-player': se.player },
+      [s('path', { class: 'ln', d, style: look ? `stroke:${look.color}` : null })]);
+    se.pts.forEach((q, i) => { if (q.r) g.append(s('circle', { class: q.r.refund ? 'rf' : q.r.win ? 'ok' : 'bad', cx: xs[i], cy: ys[i], r: q.r.refund ? 3.5 : 3 })); });
+    if (look) g.append(s('circle', { class: 'end', cx: xs.at(-1), cy: ys.at(-1), r: 2.75, style: `fill:${look.color}` })); // where the line really ends
+    groups.set(se.player, g); lines.append(g); geo.push({ se, xs, ys, look });
+  }
+  // the newest attempt, if it is fresh, gets a ring
+  const newest = state.rows.at(-1);
+  if (newest && now - newest.t < 2 * MIN && newest.after != null && newest.t >= t0)
+    svg.append(s('circle', { class: 'ring', cx: x(newest.t), cy: y(newest.after), r: 6 }));
+  // end labels: accounts in range, plus whoever is pinned. Names are nudged apart, so each gets a small square in its
+  // line's colour and a neutral hairline back to where the line ends.
+  const ends = order.filter((se) => se.kind === 'account' || se.player === state.pick)
+    .map((se) => ({ se, y0: y(se.pts.at(-1).y), y: y(se.pts.at(-1).y) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 12);
+  const over = ends.length ? ends.at(-1).y - (H - m.b + 4) : 0;
+  if (over > 0) { for (const e of ends) e.y -= over; for (let i = ends.length - 2; i >= 0; i--) ends[i].y = Math.min(ends[i].y, ends[i + 1].y - 12); }
+  const labs = new Map(), ex = W - m.r;
+  for (const e of ends) {
+    const look = lookOf(e.se.player);
+    const lead = s('path', { class: 'lead', d: `M${ex + 5},${e.y0.toFixed(1)}L${ex + 12},${e.y.toFixed(1)}` });
+    const key = s('rect', { class: 'key', x: ex + 13.5, y: e.y - 3, width: 6, height: 6, rx: 1, 'data-p': e.se.player, style: `fill:${look ? look.color : 'var(--thread)'}` });
+    const t = s('text', { class: `lab${live.has(e.se.player) ? ' live' : ''}`, x: ex + 23, y: e.y, dy: '0.32em', 'data-p': e.se.player, text: short(e.se.player).slice(0, narrow ? 9 : 14) });
+    svg.append(lead, key, t); labs.set(e.se.player, [t, lead, key]);
+  }
+  let shown = null;
+  function spot(hovered) {
+    state.hover = hovered;
+    const p = hovered || state.pick;
+    if (p === shown) return; shown = p;
+    svg.classList.toggle('spot', !!p);
+    for (const [pl, g] of groups) { const on = pl === p; g.classList.toggle('on', on); if (on) lines.append(g); }
+    for (const [pl, els] of labs) for (const el of els) el.classList.toggle('on', pl === p);
+  }
+  spot('');
+
+  // Hover picks the LINE nearest the cursor (anywhere along it, flat stretches included), not the nearest attempt
+  // dot, and keeps the current line until another is clearly closer, so it doesn't flicker where lines cross.
+  const tip = h('div', { class: 'tip', role: 'status' }); el.append(tip);
+  const mark = s('circle', { class: 'mark', r: 4.5, opacity: 0 }); svg.append(mark);
+  const REACH = 30, STICK = 7, SNAP = 8;
+  const dist = ({ xs, ys }, mx, my) => { // to a step line: flat runs and risers
+    let best = Infinity;
+    for (let i = 0; i < xs.length; i++) {
+      const x1 = i + 1 < xs.length ? xs[i + 1] : xs[i];
+      const dx = mx < xs[i] ? xs[i] - mx : mx > x1 ? mx - x1 : 0, d = Math.hypot(dx, my - ys[i]);
+      if (d < best) best = d;
+      if (i + 1 < xs.length) {
+        const lo = Math.min(ys[i], ys[i + 1]), hi = Math.max(ys[i], ys[i + 1]);
+        const d2 = Math.hypot(mx - x1, my < lo ? lo - my : my > hi ? my - hi : 0);
+        if (d2 < best) best = d2;
+      }
+    }
+    return best;
+  };
+  function lineAt(mx, my) {
+    let best = null, bd = REACH, cur = null, curD = Infinity;
+    for (const g of geo) {
+      const d = dist(g, mx, my) - (g.se.kind === 'account' ? 2 : 0); // an account wins a tie with a guest under it
+      if (g.se.player === state.hover) { cur = g; curD = d; }
+      if (d < bd) { bd = d; best = g; }
+    }
+    return cur && curD < REACH && curD - bd <= STICK ? cur : best;
+  }
+  function target(cx, cy) {
+    const box = svg.getBoundingClientRect(), k = W / box.width, mx = (cx - box.left) * k, my = (cy - box.top) * k;
+    const lp = document.elementFromPoint(cx, cy)?.getAttribute?.('data-p'); // a name label stands for its line
+    const g = lp ? geo.find((v) => v.se.player === lp) : lineAt(mx, my);
+    return g && { g, k, mx: lp ? g.xs.at(-1) : mx, my: lp ? g.ys.at(-1) : my };
+  }
+  function clear() { tip.style.opacity = 0; mark.setAttribute('opacity', 0); svg.style.cursor = ''; spot(''); }
+  function at(cx, cy) {
+    const hit = target(cx, cy);
+    if (!hit) return clear();
+    const { g, k, mx, my } = hit, { se, xs, ys } = g;
+    spot(se.player); svg.style.cursor = 'pointer';
+    // snap to an attempt when the cursor is on one; otherwise slide along the level the rating is held at
+    let near = -1, nd = Infinity, hold = 0;
+    for (let i = 0; i < xs.length; i++) {
+      if (xs[i] <= mx) hold = i;
+      if (se.pts[i].r && Math.abs(xs[i] - mx) <= SNAP) { const d = Math.hypot(xs[i] - mx, ys[i] - my); if (d < nd) { nd = d; near = i; } }
+    }
+    const i = near >= 0 ? near : hold, r = se.pts[i].r;
+    const px = near >= 0 ? xs[i] : Math.max(xs[0], Math.min(mx, xs.at(-1))), py = ys[i];
+    mark.setAttribute('cx', px); mark.setAttribute('cy', py); mark.setAttribute('opacity', 1);
+    const head = h('div', {}, [swatch(se.player), h('b', { text: se.player })]);
+    if (near >= 0) {
+      const d = r.before != null ? r.after - r.before : null;
+      tip.replaceChildren(head,
+        h('div', {}, [resMark(r, 1),
+          `${r.hinted ? ' (hint)' : ''}${r.ms ? ` in ${R(r.ms / 1000)}s` : ''} · attempt ${r.n}`]),
+        h('div', { text: `rating ${R(r.after)}${d != null && R(d) ? ` (${sgn(d)}${r.won ? ', by the refund' : r.refund ? ' then, given back since' : ''})` : ''}` }),
+        h('div', { class: 'muted', text: `${r.puzzle} · ${board(r.size)} · puzzle ${R(r.puzzle_rating)}` }),
+        h('div', { class: 'muted', text: when(r.t) }));
+    } else {
+      tip.replaceChildren(head, h('div', { text: `rating ${R(se.pts[i].y)}` }),
+        h('div', { class: 'muted' }, r ? [`since ${when(r.t)} · `, resMark(r), ` ${r.puzzle}`] : 'no attempt in view before this'));
+    }
+    const tw = tip.offsetWidth, th = tip.offsetHeight, qx = px / k, qy = py / k;
+    tip.style.left = `${Math.max(0, qx + 14 + tw > el.clientWidth ? qx - 14 - tw : qx + 14)}px`;
+    tip.style.top = `${Math.max(0, Math.min(qy - th - 10 < 0 ? qy + 12 : qy - th - 10, el.clientHeight - th))}px`;
+    tip.style.opacity = 1;
+  }
+  const move = (ev) => { state.ptr = { x: ev.clientX, y: ev.clientY }; at(ev.clientX, ev.clientY); };
+  svg.addEventListener('pointermove', move);
+  svg.addEventListener('pointerdown', move);
+  svg.addEventListener('pointerleave', () => { state.ptr = null; clear(); });
+  svg.addEventListener('click', (ev) => { const hit = target(ev.clientX, ev.clientY); if (hit) pin(hit.g.se.player); });
+  // a redraw (new data, a pin) must not drop the hover the pointer is still resting on
+  if (state.ptr && el.matches(':hover')) at(state.ptr.x, state.ptr.y);
+}
+function pin(p) { state.pick = state.pick === p ? '' : p; try { localStorage.setItem('tp-pick', state.pick); } catch {} render(); }
+
+// ---------- tables ----------
+function sortHead(table, cols, st, onSort) {
+  table.tHead.replaceChildren(h('tr', {}, cols.map((c) => h('th', { class: c.num ? 'num' : null,
+    'aria-sort': c.sort && st.k === c.k ? (st.dir < 0 ? 'descending' : 'ascending') : null },
+  c.sort ? h('button', { text: c.label, title: `Sort by ${c.tip ?? c.label.toLowerCase()}`, onclick: () => {
+    if (st.k === c.k) st.dir = -st.dir; else { st.k = c.k; st.dir = c.dir ?? -1; } onSort(); } }) : c.label))));
+}
+const cmp = (st, get) => (a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * st.dir; };
+
+function renderPlayers(ps) {
+  const tbl = $('#players'), st = state.psort, now = Date.now();
+  const rl = RANGES[state.range][0];
+  const cols = [{ k: 'player', label: 'Player', sort: 1, dir: 1 }, { k: 'rating', label: 'Rating', num: 1, sort: 1 },
+    { k: 'delta', label: `Δ ${rl}`, tip: `rating change, ${rl === 'all' ? 'all time' : 'last ' + rl}`, num: 1, sort: 1 }, { k: 'best', label: 'Peak', num: 1, sort: 1 },
+    { k: 'attempts', label: 'Attempts', num: 1, sort: 1 }, { k: 'rate', label: 'Solved', num: 1, sort: 1 }, { k: 'last', label: 'Last seen', sort: 1 }];
+  sortHead(tbl, cols, st, () => renderPlayers(players(state.rows, tMin())));
+  const shown = ps.filter((p) => state.allGuests || p.kind === 'account' || now - p.last < DAY || p.player === state.pick);
+  const hidden = ps.length - shown.length;
+  shown.sort(cmp(st, (p) => (st.k === 'player' ? p.player.toLowerCase() : p[st.k])));
+  const tb = tbl.tBodies[0]; tb.replaceChildren();
+  for (const p of shown) {
+    const g = p.kind === 'guest';
+    tb.append(h('tr', { class: `click${p.player === state.pick ? ' on' : ''}`, onclick: () => pin(p.player), title: g ? 'guest (no account)' : null }, [
+      h('td', { class: g ? 'g' : null }, [swatch(p.player), p.player]), h('td', { class: 'num', text: String(p.rating) }),
+      h('td', { class: 'num muted', text: p.delta ? sgn(p.delta) : '·' }), h('td', { class: 'num', text: String(p.best) }),
+      h('td', { class: 'num', text: String(p.attempts) }), h('td', { class: 'num', text: pct(p.rate) }),
+      h('td', { class: 'muted', text: now - p.last < HOUR ? ago(now - p.last) : when(p.last) })]));
+  }
+  const acc = ps.filter((p) => p.kind === 'account').length;
+  $('#pcount').textContent = `${pl(acc, 'account')} · ${pl(ps.length - acc, 'guest')}`;
+  const more = $('#pmore');
+  more.hidden = !hidden && !state.allGuests;
+  more.textContent = state.allGuests ? 'Hide guests idle for a day' : `Show ${pl(hidden, 'guest')} idle for a day`;
+  more.onclick = () => { state.allGuests = !state.allGuests; renderPlayers(players(state.rows, tMin())); };
+}
+
+function renderRecent() {
+  const tb = $('#recent tbody'), now = Date.now(); tb.replaceChildren();
+  for (const r of state.rows.slice(-14).reverse()) {
+    const d = r.after != null && r.before != null ? r.after - r.before : null;
+    const tr = h('tr', { class: `click${r.player === state.pick ? ' on' : ''}`, onclick: () => pin(r.player) }, [
+      h('td', { class: 'muted', text: now - r.t < HOUR ? ago(now - r.t) : when(r.t) }),
+      h('td', { class: r.kind === 'guest' ? 'g' : null, text: r.kind === 'guest' ? short(r.player) : r.player }),
+      h('td', {}, [h('a', { href: puzzleUrl(r.puzzle), target: '_blank', rel: 'noopener', text: r.puzzle, onclick: (e) => e.stopPropagation() }),
+        h('span', { class: 'd', text: board(r.size) })]),
+      r.refund ? h('td', { class: 'num rf', text: RF, 'aria-label': r.won ? 'refunded, counted as a solve' : 'missed, refunded',
+        title: r.won ? 'Missed, then refunded: the move played wins too, so it counts as a solve' : 'Missed, then refunded: the move played wins too' })
+        : h('td', { class: `num ${r.win ? 'ok' : 'bad'}`, text: r.win ? '✓' : '✗', 'aria-label': r.win ? 'solved' : 'missed' }),
+      h('td', { class: 'num muted', text: r.ms ? `${R(r.ms / 1000)}s` : '' }),
+      h('td', { class: 'num' }, r.after == null ? '…' : [String(R(r.after)), d != null && R(d) ? h('span', { class: `d${r.refund && !r.won ? ' gone' : ''}`, text: sgn(d), title: r.won ? 'the miss and its refund, net' : r.refund ? 'given back by the refund' : null }) : null])]);
+    if (state.seen.size && !state.seen.has(key(r))) tr.classList.add('new');
+    tb.append(tr);
+  }
+}
+
+// ---------- puzzle ratings ----------
+const shape = (p) => `${board(p.size)} · ${p.plies}p${p.turn === 1 ? ' · turn' : p.turn === 0 ? ' · conv' : ''}${p.grade ? ' · ' + p.grade : ''}`;
+const who = (n) => n.replace(/^guest .*/, 'guest');
+// A refunded miss (row.refund, step.refund): the move played wins too. Since 2026-11-20 it counts as a solve (won: the
+// player and the puzzle as if solved; step.rt is when). Before that the player got the points back: step.kept is how far
+// the puzzle's rating still stands from that miss; step.back and step.rt are a ledger refund's own move and time.
+// step.fix: the refund's own move on the puzzle, a step of its own at the refund's time (puzzle-stats.mjs), so the
+// result whose step spans that moment is not drawn with it; step.rose: a refunded solve's recorded step as played.
+const RF = '↺';
+const resMark = (r, long) => (r.refund ? h('span', { class: 'rf', text: !long ? RF : r.won ? `${RF} refunded` : `${RF} missed, refunded` }) // one mark: a refund is only ever given for a move that wins
+  : h('span', { class: r.win ? 'ok' : 'bad', text: r.win ? (long ? '✓ solved' : '✓') : long ? '✗ missed' : '✗' }));
+const keptText = (x) => (x.fix ? `the refund ${x.won ? 'counting it as a solve' : 'taking it back'}: puzzle ${sgn(x.back)}`
+  : x.won ? `missed when played${x.rose ? ` (puzzle ${sgn(x.rose)})` : ''}; counted as a solve${x.rt ? ' ' + when(x.rt) : ''}${x.back ? `: puzzle ${sgn(x.back)} then` : ''}` : x.kept > 0 ? `still up ${x.kept} from this miss` : x.kept < 0 ? `${-x.kept} lower than before this miss`
+  : x.back ? `moved back ${Math.abs(x.back)} by the refund` : 'nothing left from this miss');
+
+function renderFigs(P) {
+  const s0 = P.summary, a = s0.accuracy, z = s0.replayed, el = $('#figs');
+  if (!a) { el.replaceChildren(h('p', { class: 'note', text: 'Not enough rated attempts yet.' })); return; }
+  const fig = (big, label) => h('div', { class: 'fig' }, [h('b', { text: big }), h('span', { text: label })]);
+  // the verdict rests on settled players (their ratings mean something); all rated attempts include provisional newcomers
+  const MIN_SETTLED = 30, settled = z && z.n >= MIN_SETTLED, v = settled ? z : a, worse = v.live > v.base;
+  const f3 = (x) => (x == null ? '–' : x.toFixed(3));
+  const cols = [z && ['settled', z], ['all rated', a]].filter(Boolean);
+  const table = h('table', { class: 'll' }, [
+    h('thead', {}, h('tr', {}, [h('th', { text: 'log-loss' }), ...cols.map(([k, x]) => h('th', { class: 'num', text: `${k} (n=${x.n})` }))])),
+    h('tbody', {}, [['live ratings', 'live'], ['live, no rd discount', 'flat'], ['prior rating', 'prior'], ['constant guess', 'base']].map(([label, k]) =>
+      h('tr', { class: k === 'live' || k === 'base' ? null : 'muted' }, [h('td', { text: label }), ...cols.map(([, x]) => h('td', { class: 'num', text: f3(x[k]) }))]))),
+  ]);
+  el.replaceChildren(...[
+    fig(`${pct(a.solve)} vs ${pct(a.pred)}`, `solved vs what the live ratings expected, ${pl(a.n, 'rated attempt')}`),
+    s0.all ? fig(`${Math.abs(s0.all.offset)} ${s0.all.offset < 0 ? 'easier' : 'harder'}`, `than the prior says, for settled players (±${R(1.96 * s0.all.se)}, n=${s0.all.n})`) : null,
+    h('div', { class: 'fig' }, [h('b', { text: worse ? 'Loses to a constant guess' : 'Beats a constant guess' }),
+      h('span', { text: `live ratings vs always guessing the running solve rate, ${settled ? 'settled players' : `all rated attempts (${z ? `only ${z.n} settled` : 'no settled ones yet'})`}` }), table]),
+    h('p', { class: 'note', text: 'Predictions are standard Glicko E: the replayed puzzle rd discounts the rating gap; the player\'s own rd is not used. Settled: player rd under 150, on a puzzle played before. Lower log-loss is better.' })].filter(Boolean));
+}
+
+function drawCalib(el, C) {
+  el.replaceChildren();
+  const W = Math.max(260, el.clientWidth), H = Math.min(240, W * 0.8), m = { t: 8, r: 8, b: 26, l: 34 };
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Calibration: predicted vs actual solve rate' }); el.append(svg);
+  if (!C || !C.live.length) { svg.append(s('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', text: 'Not enough rated attempts yet' })); return; }
+  const x = lin(0, 1, m.l, W - m.r), y = lin(0, 1, H - m.b, m.t), ticks = [0, 0.25, 0.5, 0.75, 1];
+  yGrid(svg, y, ticks, m.l, W - m.r, pct);
+  for (const v of ticks) svg.append(s('text', { x: x(v), y: H - 8, 'text-anchor': 'middle', text: pct(v) }));
+  svg.append(s('line', { class: 'ref', x1: x(0), y1: y(0), x2: x(1), y2: y(1) }));
+  const pts = [];
+  for (const [k, c] of [['prior', '--prior'], ['live', '--accent']]) {
+    const xs = C[k]; if (!xs.length) continue;
+    svg.append(s('path', { d: xs.map((q, i) => `${i ? 'L' : 'M'}${x(q.p).toFixed(1)},${y(q.y).toFixed(1)}`).join(''), fill: 'none', stroke: `var(${c})`, 'stroke-width': 2 }));
+    for (const q of xs) { svg.append(s('circle', { cx: x(q.p), cy: y(q.y), r: 4, fill: `var(${c})`, stroke: 'var(--panel)', 'stroke-width': 1.5 }));
+      pts.push({ px: x(q.p), py: y(q.y), q, k }); }
+  }
+  svg.append(s('text', { x: x(0.02), y: y(0.98), dy: '0.7em', text: 'easier than rated' }));
+  hover(el, svg, W, pts, (hit) => hit ? [h('div', {}, h('b', { text: hit.k === 'live' ? 'live ratings' : 'prior only' })),
+    h('div', { text: `expected ${pct(hit.q.p)}, solved ${pct(hit.q.y)}` }), h('div', { class: 'muted', text: pl(hit.q.n, 'attempt') })] : []);
+}
+
+function drawOffsets(el, groups) {
+  el.replaceChildren();
+  const rows = groups.flatMap((g) => (g.rows.length ? [{ head: g.name }, ...g.rows] : []));
+  const W = Math.max(260, el.clientWidth), rh = 20, top = 20, H = top + rows.length * rh + 4, L = 96, Rr = W - 58;
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Prior offset by group' }); el.append(svg);
+  if (!rows.length) { svg.setAttribute('height', 60); svg.append(s('text', { x: 4, y: 30, text: 'Not enough settled attempts yet' })); return; }
+  let lo = -200, hi = 100;
+  for (const r of rows) if (!r.head) { lo = Math.min(lo, r.offset - 1.96 * r.se); hi = Math.max(hi, r.offset + 1.96 * r.se); }
+  const nt = nice(Math.max(-800, lo), Math.min(400, hi), 4), x = lin(nt.lo, nt.hi, L, Rr);
+  const cx = (v) => Math.max(L, Math.min(Rr, x(v)));
+  for (const v of nt.ticks) {
+    svg.append(s('line', { class: v ? 'gl' : 'ax', x1: x(v), x2: x(v), y1: top - 6, y2: H }));
+    svg.append(s('text', { x: x(v), y: 10, 'text-anchor': 'middle', text: v ? sgn(v) : '0' }));
+  }
+  const pts = [];
+  rows.forEach((r, i) => {
+    const yy = top + i * rh + rh / 2;
+    if (r.head) { svg.append(s('text', { x: 0, y: yy, dy: '0.32em', style: 'fill:var(--fg);font-weight:600', text: r.head })); return; }
+    svg.append(s('text', { x: 10, y: yy, dy: '0.32em', text: r.k }));
+    svg.append(s('line', { x1: cx(r.offset - 1.96 * r.se), x2: cx(r.offset + 1.96 * r.se), y1: yy, y2: yy, stroke: 'var(--prior)', 'stroke-width': 3, 'stroke-opacity': 0.35, 'stroke-linecap': 'round' }));
+    svg.append(s('circle', { cx: cx(r.offset), cy: yy, r: 4.5, fill: 'var(--prior)', stroke: 'var(--panel)', 'stroke-width': 1.5 }));
+    svg.append(s('text', { x: W, y: yy, dy: '0.32em', 'text-anchor': 'end', text: sgn(r.offset) }));
+    pts.push({ px: cx(r.offset), py: yy, r });
+  });
+  hover(el, svg, W, pts, (hit) => hit ? [h('div', {}, h('b', { text: hit.r.k })),
+    h('div', { text: `offset ${sgn(hit.r.offset)} ± ${R(1.96 * hit.r.se)}` }),
+    h('div', { class: 'muted', text: `${pl(hit.r.n, 'attempt')} · ${pct(hit.r.solve)} solved` })] : [], 40);
+}
+
+function drawRoll(el, roll) {
+  el.replaceChildren();
+  const W = Math.max(260, el.clientWidth), H = Math.min(240, W * 0.8), m = { t: 8, r: 8, b: 26, l: 38 };
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Rolling log-loss' }); el.append(svg);
+  if (roll.length < 2) { svg.append(s('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', text: 'Not enough rated attempts yet' })); return; }
+  // x = attempt index (the last point may be only 1–4 attempts after the one before it)
+  const at = (p, i) => p.n ?? i, x0 = lin(at(roll[0], 0), at(roll.at(-1), roll.length - 1), m.l, W - m.r), x = (i) => x0(at(roll[i], i));
+  let lo = Infinity, hi = -Infinity; for (const p of roll) for (const k of ['live', 'prior', 'base']) { lo = Math.min(lo, p[k]); hi = Math.max(hi, p[k]); }
+  const yt = nice(Math.min(lo, 0.55), Math.max(hi, 0.75), 4), y = lin(yt.lo, yt.hi, H - m.b, m.t);
+  yGrid(svg, y, yt.ticks, m.l, W - m.r, (v) => v.toFixed(2));
+  let last = '', lastX = -99;
+  roll.forEach((p, i) => {
+    const d = dayOf(p.t); if (d === last) return; last = d;
+    if (i) svg.append(s('line', { class: 'gl', x1: x(i), x2: x(i), y1: m.t, y2: H - m.b }));
+    if (x(i) - lastX > 44) { svg.append(s('text', { x: x(i) + 2, y: H - 8, text: d })); lastX = x(i); }
+  });
+  svg.append(s('line', { class: 'ref', x1: m.l, x2: W - m.r, y1: y(Math.LN2), y2: y(Math.LN2) }));
+  svg.append(s('text', { x: m.l + 4, y: y(Math.LN2) - 4, text: 'coin flip' }));
+  for (const [k, c, w, dash] of [['base', '--faint', 1.5, '4 3'], ['prior', '--prior', 1.5, null], ['live', '--accent', 2.25, null]])
+    svg.append(s('path', { d: roll.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join(''), fill: 'none', stroke: `var(${c})`, 'stroke-width': w, 'stroke-dasharray': dash }));
+  const xh = s('line', { class: 'ax', y1: m.t, y2: H - m.b, opacity: 0 }); svg.append(xh);
+  const pts = roll.map((p, i) => ({ px: x(i), py: y(p.live), p }));
+  hover(el, svg, W, pts, (hit) => {
+    if (!hit) { xh.setAttribute('opacity', 0); return []; }
+    xh.setAttribute('x1', hit.px); xh.setAttribute('x2', hit.px); xh.setAttribute('opacity', 1);
+    return [h('div', {}, h('b', { text: when(hit.p.t) })), h('div', { text: `live ${hit.p.live.toFixed(3)}` }),
+      h('div', { text: `prior ${hit.p.prior.toFixed(3)}` }), h('div', { class: 'muted', text: `constant ${hit.p.base.toFixed(3)}` })];
+  }, 400);
+}
+
+function drawPath(el, p) {
+  const steps = p.steps.filter((st) => !st.legacy);
+  const pts = [{ i: 0, r: p.init, rd: 250 }, ...steps.map((st, i) => ({ i: i + 1, r: st.after, rd: st.rd, s: st }))];
+  const W = Math.min(760, Math.max(280, el.clientWidth)), H = 210, m = { t: 12, r: 14, b: 34, l: 44 };
+  let lo = Infinity, hi = -Infinity;
+  for (const q of pts) { lo = Math.min(lo, q.r - q.rd); hi = Math.max(hi, q.r + q.rd); }
+  for (const st of steps) { lo = Math.min(lo, st.ur); hi = Math.max(hi, st.ur); }
+  const yt = nice(lo, hi, 4), x = lin(0, Math.max(1, pts.length - 1), m.l + 12, W - m.r - 12), y = lin(yt.lo, yt.hi, H - m.b, m.t);
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': `Rating path of ${p.id}`, style: `max-width:${W}px` });
+  el.append(svg);
+  yGrid(svg, y, yt.ticks, m.l, W - m.r);
+  const area = pts.map((q, i) => `${i ? 'L' : 'M'}${x(q.i)},${y(q.r + q.rd)}`).join('') + pts.slice().reverse().map((q) => `L${x(q.i)},${y(q.r - q.rd)}`).join('') + 'Z';
+  svg.append(s('path', { d: area, fill: 'var(--accent)', 'fill-opacity': 0.12 }));
+  svg.append(s('line', { x1: m.l, x2: W - m.r, y1: y(p.init), y2: y(p.init), stroke: 'var(--prior)', 'stroke-dasharray': '4 3' }));
+  svg.append(s('path', { d: pts.map((q, i) => `${i ? 'L' : 'M'}${x(q.i)},${y(q.r)}`).join(''), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }));
+  const every = Math.ceil(pts.length / Math.max(4, Math.floor((W - m.l) / 58)));
+  const hits = [];
+  for (const q of pts.slice(1)) {
+    const c = q.s.refund ? 'var(--refund)' : q.s.win ? 'var(--ok)' : 'var(--bad)';
+    svg.append(s('line', { x1: x(q.i), x2: x(q.i), y1: y(q.s.ur), y2: y(q.r), stroke: c, 'stroke-opacity': 0.4, 'stroke-dasharray': '2 2' }));
+    svg.append(s('circle', { cx: x(q.i), cy: y(q.s.ur), r: 4.5, fill: q.s.moved || q.s.kept > 0 ? c : 'var(--panel)', stroke: c, 'stroke-width': 1.5 }));
+    hits.push({ px: x(q.i), py: y(q.s.ur), q });
+    if (q.i % every === 0 || pts.length <= 12) {
+      svg.append(s('text', { x: x(q.i), y: H - 18, 'text-anchor': 'middle', text: who(q.s.who).slice(0, 9) }));
+      svg.append(s('text', { x: x(q.i), y: H - 5, 'text-anchor': 'middle', text: q.s.ur }));
+    }
+  }
+  svg.append(s('text', { x: x(0), y: H - 18, 'text-anchor': 'middle', text: 'prior' }));
+  svg.append(s('text', { x: x(0), y: H - 5, 'text-anchor': 'middle', text: p.init }));
+  hover(el, svg, W, hits, (hit) => hit ? [h('div', {}, h('b', { text: hit.q.s.who })),
+    h('div', {}, [hit.q.s.fix ? h('span', { class: 'rf', text: `${RF} the refund's move` }) : resMark(hit.q.s, 1), ` at ${hit.q.s.ur}${hit.q.s.rated || hit.q.s.refund ? '' : ' (hint)'}${hit.q.s.rt && !hit.q.s.won ? `, refunded ${when(hit.q.s.rt)}` : ''}`]),
+    h('div', {}, [`puzzle → ${hit.q.s.after} ±${hit.q.s.rd}`, hit.q.s.refund ? h('span', { class: hit.q.s.kept ? 'rf' : 'muted', text: `, ${keptText(hit.q.s)}` }) : hit.q.s.moved ? '' : ', unmoved']), h('div', { class: 'muted', text: when(hit.q.s.t) })] : []);
+}
+
+function renderPuzzles() {
+  const P = state.puzzles; if (!P) return;
+  renderFigs(P);
+  drawCalib($('#pr-cal'), P.calib);
+  drawOffsets($('#pr-off'), P.offsets);
+  drawRoll($('#pr-roll'), P.roll);
+  renderPuzzleTable();
+}
+function renderPuzzleTable() {
+  const P = state.puzzles, st = state.zsort, tbl = $('#puzzles');
+  const cols = [{ k: 'id', label: 'Puzzle', sort: 1, dir: 1 }, { k: 'shape', label: 'Shape' }, { k: 'plays', label: 'Plays', num: 1, sort: 1 },
+    { k: 'results', label: 'Results' }, { k: 'init', label: 'Prior', num: 1, sort: 1 }, { k: 'rating', label: 'Now', num: 1, sort: 1 },
+    { k: 'move', label: 'Δ', tip: 'rating change since the prior', num: 1, sort: 1 }, { k: 'last', label: 'Last played', sort: 1 }];
+  sortHead(tbl, cols, st, () => { state.zshow = 25; renderPuzzleTable(); });
+  const get = { id: (p) => p.id, plays: (p) => p.plays * 1e4 + p.moves, init: (p) => p.init, rating: (p) => p.rating, move: (p) => p.rating - p.init, last: (p) => p.last }[st.k];
+  const refunded = P.puzzles.filter((p) => p.steps.some((x) => x.refund)), rsteps = refunded.flatMap((p) => p.steps.filter((x) => x.refund && !x.fix));
+  if (!refunded.length) state.zref = false;
+  const list = (state.zref ? refunded : P.puzzles).slice().sort(cmp(st, get)), shown = list.slice(0, state.zshow);
+  const tb = tbl.tBodies[0]; tb.replaceChildren();
+  for (const p of shown) {
+    const res = p.steps.filter((x) => !x.fix).map((x) => h('span', { class: `who-r${x.moved || x.refund ? '' : ' faint'}${/^guest /.test(x.who) ? ' g' : ''}`,
+      title: x.legacy ? `${x.who} (old guest, not rated)` : x.refund ? `${x.who} ${x.ur}: missed, refunded${x.rt && !x.won ? ` ${when(x.rt)}` : ''}. Puzzle → ${x.after} ±${x.rd}, ${keptText(x)}`
+        : `${x.who} ${x.ur} → puzzle ${x.after} ±${x.rd}${x.rated ? '' : ' (hint)'}` },
+    [resMark(x), h('span', { text: who(x.who) }), x.kept > 0 ? h('i', { class: 'rf', text: `+${x.kept}` }) : null]));
+    const nrf = p.steps.filter((x) => x.refund && !x.fix).length;
+    const d = p.rating - p.init;
+    tb.append(h('tr', { class: `click${state.open === p.id ? ' on' : ''}`, 'aria-expanded': String(state.open === p.id),
+      onclick: () => { state.open = state.open === p.id ? '' : p.id; renderPuzzleTable(); } }, [
+      h('td', {}, [h('a', { href: puzzleUrl(p.id), target: '_blank', rel: 'noopener', text: p.id, onclick: (e) => e.stopPropagation() }),
+        nrf ? h('span', { class: 'd rf', text: RF, title: `${nrf} refunded ${nrf === 1 ? 'miss' : 'misses'}${p.flaw === 2 ? '; the puzzle is not fixed yet' : p.flaw === 1 ? '; its other winning move is on record now' : ''}` }) : null]),
+      h('td', { class: 'muted', text: shape(p) }), h('td', { class: 'num', text: String(p.plays) }), h('td', { class: 'res-cell' }, res),
+      h('td', { class: 'num muted', text: String(p.init) }), h('td', { class: 'num' }, [String(p.rating), h('span', { class: 'd', text: `±${p.rd}` })]),
+      h('td', { class: 'num', text: d ? sgn(d) : '·' }), h('td', { class: 'muted', text: p.last ? when(p.last) : '' })]));
+    if (state.open === p.id) { const c = h('td', { colspan: cols.length }); tb.append(h('tr', { class: 'detail' }, c)); drawPath(c, p); }
+  }
+  $('#pr-count').replaceChildren(`${P.puzzles.length} played · ${P.puzzles.filter((p) => p.plays > 1).length} more than once · ${P.puzzles.filter((p) => p.moves >= 3).length} moved 3+ times`,
+    refunded.length ? h('div', { class: 'seg sm', style: 'margin-left:10px' }, h('button', { class: state.zref ? 'on' : null, 'aria-pressed': String(!!state.zref), text: `${RF} ${refunded.length} with a refund`,
+      onclick: () => { state.zref = !state.zref; state.zshow = 25; renderPuzzleTable(); } })) : null);
+  const up = rsteps.filter((x) => x.kept > 0), won = rsteps.filter((x) => x.won).length, note = $('#pr-refunds');
+  note.hidden = !rsteps.length;
+  note.replaceChildren(h('span', { class: 'rf', text: RF }), ` ${rsteps.length} ${rsteps.length === 1 ? 'miss was' : 'misses were'} refunded, on ${refunded.length} ${refunded.length === 1 ? 'puzzle' : 'puzzles'}${won ? `; ${won === rsteps.length ? (won === 1 ? 'it counts' : 'all count') : `${won} count`} as ${won === 1 ? 'a solve' : 'solves'}` : ''}. `,
+    up.length ? `${up.length} of them still ${up.length === 1 ? 'stands' : 'stand'} in the puzzle's rating: it went up on the miss (by ${Math.min(...up.map((x) => x.kept))} to ${Math.max(...up.map((x) => x.kept))}) and was not moved back.`
+      : 'None of them is left in a puzzle\u2019s rating.');
+  const more = $('#prmore'), left = list.length - shown.length;
+  more.hidden = left <= 0; more.textContent = `Show ${Math.min(25, left)} more`;
+  more.onclick = () => { state.zshow += 25; renderPuzzleTable(); };
+}
+
+// ---------- rush and streak ----------
+// /rush.json: every player's run counts and the latest runs with their puzzles and moves (scripts/players-live/rush-stats.mjs).
+const RUSH_MS = 180e3, BAND = 200;
+const ru = { charts: [], lit: undefined, reveal: null, tpos: null };
+const mmss = (ms) => { const t = Math.max(0, R(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+const secs = (ms) => (ms == null ? '–' : ms < 9950 ? `${(ms / 1000).toFixed(1)}s` : ms < 90e3 ? `${R(ms / 1000)}s` : mmss(ms));
+const quant = (xs, p) => { const i = (xs.length - 1) * p, a = Math.floor(i); return xs[a] + (xs[Math.min(xs.length - 1, a + 1)] - xs[a]) * (i - a); }; // xs sorted
+const elo = (ur, pr) => 1 / (1 + 10 ** ((pr - ur) / 400));
+const wilson = (k, n) => { const z = 1.96, p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d, w = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d; return [Math.max(0, c - w), Math.min(1, c + w)]; };
+const stepped = (pts) => pts.flatMap(([a, b], i) => (i ? [[a, pts[i - 1][1]], [a, b]] : [[a, b]]));
+const modeName = (m) => (m === 'streak' ? 'Streak' : 'Rush');
+const odds = (e) => (e > 0.995 ? '>99%' : e < 0.005 ? '<1%' : pct(e)); // a rounded 100% would hide that it was still a chance
+function msTicks(max, n) {
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600].map((v) => v * 1000).find((v) => max / v <= n) ?? 7200e3;
+  const hi = Math.max(step, Math.ceil(max / step) * step), ticks = [];
+  for (let v = 0; v <= hi; v += step) ticks.push(v);
+  return { hi, ticks };
+}
+function placeTip(tip, el, px, py) {
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = `${Math.max(0, px + 14 + tw > el.clientWidth ? px - 14 - tw : px + 14)}px`;
+  tip.style.top = `${Math.max(0, Math.min(py - th - 10 < 0 ? py + 12 : py - th - 10, el.clientHeight - th))}px`;
+  tip.style.opacity = 1;
+}
+
+// Arrays to objects, and each run's two trajectories.
+function prepRush(D) {
+  for (const run of D.runs) {
+    const at = new Map();
+    run.pz = run.pz.map((a, pos) => a && { pos, id: a[0], rating: a[1], st: a[2], ms: a[3], clock: a[4], combo: a[5], hidden: a[6], wrong: a[7], mv: [] }).filter(Boolean);
+    for (const p of run.pz) at.set(p.pos, p);
+    let paused = 0;
+    run.mv = run.mv.map(([pos, n, first, ms, t, clock, weight, correct, ptn, check, pause, open, credit, final, checkMs, held]) => {
+      // ct: the move's time on the clock, real time less the engine pauses of the moves before it
+      const m = { pos, n, first, ms, t, clock, weight, correct, ptn, check, pause: pause || 0, open, credit, final, checkMs, held, ct: t == null ? null : t - paused };
+      paused += m.pause; at.get(pos)?.mv.push(m); return m;
+    });
+    run.adj = run.paused != null; // posted since off-line moves are judged (2026-11-19)
+    run.clockMs = Math.max(0, run.ms - (run.paused || 0));
+    // solved count against clock time, and where the mistakes fell on it
+    // and the same count against real time since the run's start, for the chart on wall-clock time
+    let k = 0; const traj = [[0, 0]], real = [[0, 0]]; run.miss = []; run.rmiss = []; run.solves = [];
+    for (const p of run.pz) {
+      for (const m of p.mv) if (!m.correct && !m.open && m.ct != null) { run.miss.push([m.ct, k]); run.rmiss.push([m.t, k]); }
+      if (p.st === 1) k++;
+      const last = p.mv.at(-1); if (last?.ct != null) { traj.push([last.ct, k]); if (p.st === 1) { real.push([last.t, k]); run.solves.push({ t: last.t, k, p }); } }
+    }
+    run.dur = Math.max(run.ms, real.at(-1)[0], 1000);
+    run.start = run.t - run.dur; // t is when the run ended on the player's device (when it was posted, in the oldest rows)
+    real.push([run.dur, run.score]); // ends on the posted score
+    run.real = stepped(real);
+    if (!run.left && traj.length > 1 && traj.at(-1)[0] < run.clockMs) traj.push([run.clockMs, k]);
+    run.traj = traj.length > 1 ? stepped(traj) : [];
+    // clock left against real time: falls a second a second, steps at a bonus or a mistake, holds while the engine thinks
+    run.clock = []; run.cmiss = [];
+    if (run.mode === 'rush') {
+      let pc = RUSH_MS, pct = 0, pt = 0; const c = [[0, pc]];
+      for (const m of run.mv) {
+        if (m.t == null || m.clock == null) continue;
+        c.push([m.t, Math.max(0, pc - (m.ct - pct))], [m.t, m.clock]);
+        if (m.pause) c.push([m.t + m.pause, m.clock]);
+        if (!m.correct && !m.open) run.cmiss.push([m.t, m.clock]);
+        pc = m.clock; pct = m.ct; pt = m.t + m.pause;
+      }
+      if (!run.left && c.length > 1 && pc > 0) c.push([pt + pc, 0]);
+      if (c.length > 1) run.clock = c;
+    }
+  }
+  D.runs.sort((a, b) => a.t - b.t || a.id - b.id);
+}
+
+// The mode's runs, oldest first, each with its emphasis: the newest strongest. A pinned player's runs only, when
+// the pinned player has any in this mode.
+function rushRuns() {
+  const runs = state.rush.runs.filter((r) => r.mode === state.rmode);
+  const pinned = state.pick && runs.some((r) => r.player === state.pick) ? state.pick : '';
+  let i = 0;
+  for (const r of runs.slice().reverse()) {
+    r.rank = pinned && r.player !== pinned ? Infinity : i++;
+    r.o = r.rank < 3 ? 1 : r.rank < 8 ? 0.6 : r.rank === Infinity ? 0.1 : 0.3;
+    r.w = r.rank < 3 ? 2.25 : r.left ? 1.25 : 1.5;
+  }
+  return { runs, pinned };
+}
+
+// Hover for a chart of lines: picks the line nearest the pointer, anywhere along it, and keeps it until another is
+// clearly closer. geo: [{ id, pts: [[x, y]...] in svg units, bonus }]. o.tip(g, x, y) -> nodes; o.spot(id); o.pick(g).
+function lineHover(el, svg, W, geo, o) {
+  const tip = h('div', { class: 'tip', role: 'status' }); el.append(tip);
+  const mark = s('circle', { class: 'mark', r: 4.5, opacity: 0 }); svg.append(mark);
+  const REACH = 30, STICK = 7;
+  let cur = null;
+  const near = (p, mx, my) => {
+    let bd = Infinity, bx = p[0][0], by = p[0][1];
+    for (let i = 0; i + 1 < p.length; i++) {
+      const [x1, y1] = p[i], [x2, y2] = p[i + 1], dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy;
+      const t = L ? Math.max(0, Math.min(1, ((mx - x1) * dx + (my - y1) * dy) / L)) : 0, qx = x1 + t * dx, qy = y1 + t * dy, d = Math.hypot(mx - qx, my - qy);
+      if (d < bd) { bd = d; bx = qx; by = qy; }
+    }
+    return { d: bd, x: bx, y: by };
+  };
+  function hit(ev) {
+    const box = svg.getBoundingClientRect(), k = W / box.width, mx = (ev.clientX - box.left) * k, my = (ev.clientY - box.top) * k;
+    let best = null, bd = REACH, keep = null;
+    for (const g of geo) {
+      const n = near(g.pts, mx, my), d = n.d - (g.bonus || 0);
+      if (g.id === cur) keep = { g, n, d };
+      if (d < bd) { bd = d; best = { g, n, d }; }
+    }
+    const v = keep && keep.d < REACH && keep.d - bd <= STICK ? keep : best;
+    return v && { ...v, k, box };
+  }
+  const clear = () => { cur = null; tip.style.opacity = 0; mark.setAttribute('opacity', 0); svg.style.cursor = ''; o.spot(null); };
+  const move = (ev) => {
+    const v = hit(ev); if (!v) return clear();
+    cur = v.g.id; o.spot(cur); svg.style.cursor = 'pointer';
+    mark.setAttribute('cx', v.n.x); mark.setAttribute('cy', v.n.y); mark.setAttribute('opacity', 1);
+    tip.replaceChildren(...o.tip(v.g, v.n.x, v.n.y));
+    const eb = el.getBoundingClientRect();
+    placeTip(tip, el, v.box.left - eb.left + v.n.x / v.k, v.box.top - eb.top + v.n.y / v.k);
+  };
+  svg.addEventListener('pointermove', move);
+  svg.addEventListener('pointerdown', move);
+  svg.addEventListener('pointerleave', clear);
+  svg.addEventListener('click', (ev) => { const v = hit(ev); if (v) o.pick(v.g); });
+  return { clear };
+}
+
+// Light up one run in both trajectory charts: the one under the pointer, else the one opened below.
+// Only when the lit run changes: re-inserting the line under the pointer on every event would swallow the click
+// (Chrome drops a click whose pressed element left the document between press and release).
+function ruSpot(id) {
+  state.rhover = id;
+  const p = id ?? state.rsel;
+  if (p === ru.lit) return; ru.lit = p;
+  for (const c of ru.charts) {
+    c.svg.classList.toggle('spot', p != null && c.groups.has(p));
+    for (const [k, g] of c.groups) { const on = k === p; g.classList.toggle('on', on); if (on) c.lines.append(g); }
+  }
+}
+const runTip = (run, extra) => [h('div', {}, [swatch(run.player), h('b', { text: run.player })]),
+  h('div', { text: `${modeName(run.mode)} ${run.score} · ${pl(run.moves, 'move')} · ${pl(run.errors, 'mistake')}${run.left ? ' · left early' : ''}${run.late ? ' · posted late' : ''}` }),
+  h('div', { text: extra }), h('div', { class: 'muted', text: `${dayOf(run.t)}, ${clock(run.t)}` })];
+
+// One line per run. o: { pts(run) -> [[ms, value]...], miss(run), yms (y is time), at(ms, value) -> tip line, aria, empty }
+function drawRuns(el, runs, o) {
+  el.replaceChildren();
+  const W = Math.max(280, el.clientWidth), H = Math.min(300, Math.max(220, R(W * 0.6))), m = { t: 10, r: 14, b: 26, l: 40 };
+  const svg = s('svg', { class: 'ru', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': o.aria }); el.append(svg);
+  const data = runs.map((run) => ({ run, d: o.pts(run) })).filter((v) => v.d.length > 1);
+  if (!data.length) { svg.append(s('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', text: o.empty })); return null; }
+  let xm = 0, ym = 0;
+  for (const v of data) for (const [a, b] of v.d) { xm = Math.max(xm, a); ym = Math.max(ym, b); }
+  const xt = msTicks(xm, Math.max(3, Math.floor((W - m.l - m.r) / 64))), yt = o.yms ? msTicks(ym, 6) : nice(0, Math.max(ym, 4), 5);
+  const x = lin(0, xt.hi, m.l, W - m.r), y = lin(0, yt.hi, H - m.b, m.t);
+  yGrid(svg, y, yt.ticks, m.l, W - m.r, o.yms ? mmss : String);
+  for (const v of xt.ticks) svg.append(s('text', { x: x(v), y: H - 8, 'text-anchor': 'middle', text: mmss(v) }));
+  const lines = s('g'), groups = new Map(), geo = []; svg.append(lines);
+  for (const { run, d } of data.slice().sort((a, b) => b.run.rank - a.run.rank)) { // strongest on top
+    const pts = d.map(([a, b]) => [x(a), y(b)]), look = lookOf(run.player);
+    const g = s('g', { class: `run${run.rank < 3 ? ' top' : ''}`, style: `--o:${run.o};--w:${run.w}${look ? `;--c:${look.color}` : ''}` }, [
+      s('path', { d: pts.map(([a, b], i) => `${i ? 'L' : 'M'}${a.toFixed(1)},${b.toFixed(1)}`).join('') }),
+      ...o.miss(run).map(([a, b]) => s('circle', { class: 'miss', cx: x(a), cy: y(b), r: 2.75 })),
+      s('circle', { class: 'end', cx: pts.at(-1)[0], cy: pts.at(-1)[1], r: 2.75 })]);
+    lines.append(g); groups.set(run.id, g); geo.push({ id: run.id, run, pts, bonus: run.rank < 3 ? 2 : 0 });
+  }
+  lineHover(el, svg, W, geo, { spot: ruSpot, tip: (g, px, py) => runTip(g.run, o.at(x.inv(px), y.inv(py))),
+    pick: (g) => { state.rsel = state.rsel === g.id ? null : g.id; renderRun(); ruSpot(state.rhover); ru.reveal?.(state.rsel); } });
+  return { svg, lines, groups };
+}
+
+// Score against real time: every run on one time axis, each starting again from 0. A run lasts minutes and the data
+// spans days, so only the time someone was playing is drawn: an idle gap over TGAP is cut to a narrow band that says
+// how long it was. The scale is fixed (stretched only when everything fits), so the plot scrolls sideways beside a
+// score axis that stays put, and it opens at the latest run.
+const TGAP = 5 * MIN, TPAD = 20e3, TPX = 20 / MIN, TBREAK = 22, NAME = 240;
+const gapText = (ms) => { const n = R(ms / MIN); return n < 60 ? `${n} min` : n < 1440 ? `${Math.floor(n / 60)} h ${n % 60} min` : `${Math.floor(n / 1440)} d ${Math.floor((n % 1440) / 60)} h`; };
+const clockS = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+function drawTime(el, runs, pinned) {
+  el.replaceChildren(); ru.reveal = null;
+  const count = new Map();
+  for (const r of runs) count.set(r.player, (count.get(r.player) || 0) + 1);
+  $('#ru-time-who').replaceChildren(...[...count].sort((a, b) => b[1] - a[1]).map(([p, n]) => h('button', { class: p === state.pick ? 'on' : null,
+    title: p === state.pick ? 'Show everyone' : `Follow ${p}`, onclick: () => pin(p) }, [swatch(p), p, h('span', { class: 'faint', text: String(n) })])));
+  const data = runs.slice().sort((a, b) => a.start - b.start || a.id - b.id);
+  if (!data.length) { el.append(h('p', { class: 'note', text: `No ${modeName(state.rmode)} runs yet.` })); return null; }
+  const segs = [];
+  for (const r of data) {
+    const a = r.start, b = r.start + r.dur, last = segs.at(-1);
+    if (last && a - last.t1 <= TGAP) { last.t1 = Math.max(last.t1, b); last.runs.push(r); } else segs.push({ t0: a, t1: b, runs: [r] });
+  }
+  const H = 250, m = { t: 22, r: 16, b: 36, l: 6 }, YW = 30;
+  const total = segs.reduce((v, g) => v + g.t1 - g.t0 + 2 * TPAD, 0), fixed = m.l + m.r + (segs.length - 1) * TBREAK;
+  const k = Math.min(3 * TPX, Math.max(TPX, (Math.max(240, el.clientWidth - YW) - fixed) / total)); // px per ms
+  let px = m.l;
+  for (const g of segs) { const x0 = px; g.x0 = x0; g.x = (t) => x0 + (t - g.t0 + TPAD) * k; g.inv = (p) => g.t0 - TPAD + (p - x0) / k; g.x1 = g.x(g.t1 + TPAD); px = g.x1 + TBREAK; }
+  const W = Math.ceil(px - TBREAK + m.r);
+  const yt = nice(0, Math.max(4, ...data.map((r) => r.score)), 5), y = lin(0, yt.hi, H - m.b, m.t);
+  const ya = s('svg', { viewBox: `0 0 ${YW} ${H}`, width: YW, height: H, 'aria-hidden': 'true' });
+  for (const v of yt.ticks) ya.append(s('text', { x: YW - 6, y: y(v), dy: '0.32em', 'text-anchor': 'end', text: v }));
+  const svg = s('svg', { class: 'ru tm', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': `${modeName(state.rmode)} score against real time, one line per run, idle gaps cut out` });
+  const hs = h('div', { class: 'hs', tabindex: '0', 'aria-label': 'Score against real time; scrolls sideways' }, svg);
+  el.append(h('div', { class: 'tl' }, [ya, hs]));
+  for (const v of yt.ticks) svg.append(s('line', { class: 'gl', x1: 0, x2: W, y1: y(v), y2: y(v) }));
+  // the cuts, and the time labels: each stretch's start first, then round times where there is room
+  const boxes = [], y0 = y(0);
+  const label = (x, anchor, t, day) => {
+    const w = Math.max(clock(t).length, day ? dayOf(t).length : 0) * 6.2 + 8, l = anchor === 'start' ? x - 2 : x - w / 2;
+    if (l < 0 || l + w > W || boxes.some(([a, b]) => l < b && l + w > a)) return;
+    boxes.push([l, l + w]);
+    svg.append(s('line', { class: 'ax', x1: x, x2: x, y1: y0, y2: y0 + 4 }), s('text', { x, y: y0 + 16, 'text-anchor': anchor, text: clock(t) }));
+    if (day) svg.append(s('text', { x, y: y0 + 29, 'text-anchor': anchor, style: 'fill:var(--faint)', text: dayOf(t) }));
+  };
+  segs.forEach((g, i) => {
+    svg.append(s('line', { class: 'ax', x1: g.x0, x2: g.x1, y1: y0, y2: y0 }));
+    const next = segs[i + 1];
+    if (next) {
+      const cx = g.x1 + TBREAK / 2, cy = (m.t + y0) / 2;
+      svg.append(s('rect', { class: 'brk', x: g.x1, width: TBREAK, y: m.t - 10, height: y0 - m.t + 10 }),
+        s('text', { class: 'brkt', x: cx, y: cy, dy: '0.32em', 'text-anchor': 'middle', transform: `rotate(-90 ${cx} ${cy})`, text: gapText(next.t0 - g.t1) }));
+    }
+    label(g.x(g.t0), 'start', g.t0, !i || dayOf(g.t0) !== dayOf(segs[i - 1].t0));
+  });
+  const step = ([1, 2, 5, 10, 15, 30, 60].find((v) => v * MIN * k >= 72) ?? 120) * MIN;
+  for (const g of segs) {
+    const off = new Date(g.t0).getTimezoneOffset() * MIN;
+    for (let t = Math.ceil((g.t0 - off) / step) * step + off; t <= g.t1; t += step) { const d = new Date(t); label(g.x(t), 'middle', t, d.getHours() === 0 && d.getMinutes() === 0); }
+  }
+  // the runs; the score at every end and a name where the player changes (and again every NAMEPX, so one is always
+  // in view), wherever they fit
+  const lines = s('g'), groups = new Map(), geo = [], taken = []; svg.append(lines);
+  const hue = (p) => (state.slot.get(p) ?? -1) % HUES, shared = new Set([...count.keys()].filter((p) => hue(p) >= 0 && [...count.keys()].some((q) => q !== p && hue(q) === hue(p))));
+  const NAMEPX = Math.max(120, Math.min(NAME, hs.clientWidth - 100)); // a phone's window holds less than NAME px
+  for (const g of segs) {
+    let prev = null, named = -Infinity;
+    for (const run of g.runs) {
+      const pts = run.real.map(([a, b]) => [g.x(run.start + a), y(b)]), look = lookOf(run.player), [ex, ey] = pts.at(-1);
+      const node = s('g', { class: `run${run.left ? ' left' : ''}`, style: `--o:${pinned && run.player !== pinned ? 0.12 : 1};--w:1.75${look ? `;--c:${look.color}` : ''}` }, [
+        s('path', { d: pts.map(([a, b], i) => `${i ? 'L' : 'M'}${a.toFixed(1)},${b.toFixed(1)}`).join('') }),
+        ...run.rmiss.map(([a, b]) => s('circle', { class: 'miss', cx: g.x(run.start + a), cy: y(b), r: 2.5 })),
+        s('circle', { class: 'end', cx: ex, cy: ey, r: 2.75 })]);
+      const name = prev !== run.player || ex - named > NAMEPX || shared.has(run.player) ? short(run.player) : null; // prev, named: the last name drawn; always named when its colour is shared
+      for (const nm of name ? [name, null] : [null]) {
+        const w = ((nm ? nm.length + 1 : 0) + String(run.score).length) * 6.4 + 2, r = Math.max(ex + 3, w + 2), box = [r - w, ey - 19, r, ey - 5];
+        if (taken.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+        taken.push(box); if (nm) { prev = run.player; named = ex; }
+        node.append(s('text', { class: 'rl', x: r, y: ey - 7, 'text-anchor': 'end' }, [nm ? s('tspan', { text: `${nm} ` }) : null, s('tspan', { class: 'sc', text: run.score })]));
+        break;
+      }
+      lines.append(node); groups.set(run.id, node); geo.push({ id: run.id, run, seg: g, pts });
+    }
+  }
+  const hov = lineHover(el, svg, W, geo, { spot: ruSpot,
+    tip: (v, px) => {
+      const run = v.run, t = Math.min(run.start + run.dur, Math.max(run.start, v.seg.inv(px))), at = t - run.start;
+      const sv = run.solves.filter((q) => q.t <= at + 1).at(-1), n = t >= run.start + run.dur - 1 ? run.score : sv?.k ?? 0;
+      return [h('div', {}, [swatch(run.player), h('b', { text: run.player })]),
+        h('div', { text: `${modeName(run.mode)} ${run.score}${run.left ? ' · left early' : ''}${run.late ? ' · posted late' : ''} · started ${when(run.start)}` }),
+        h('div', {}, [h('b', { text: `${n} solved` }), ` at ${clockS(t)}, ${mmss(at)} in`]),
+        h('div', { class: 'muted', text: sv ? `just solved: ${sv.p.id}${sv.p.rating != null ? `, rated ${sv.p.rating}` : ''}, in ${secs(sv.p.ms)}` : 'nothing solved yet' })];
+    },
+    pick: (v) => { state.rsel = state.rsel === v.id ? null : v.id; renderRun(); ruSpot(state.rhover); } });
+  // ru.tpos: where the reader scrolled back to, kept across redraws; null stays on the latest (noted on scroll, since
+  // a narrower window would otherwise read as having scrolled away from the end)
+  hs.scrollLeft = ru.tpos ?? hs.scrollWidth;
+  hs.addEventListener('scroll', () => { ru.tpos = hs.scrollLeft + hs.clientWidth < hs.scrollWidth - 8 ? hs.scrollLeft : null; hov.clear(); }, { passive: true });
+  ru.reveal = (id) => {
+    const v = geo.find((q) => q.id === id); if (!v) return;
+    const a = v.pts[0][0], b = v.pts.at(-1)[0];
+    if (a < hs.scrollLeft || b > hs.scrollLeft + hs.clientWidth) hs.scrollLeft = Math.max(0, (a + b) / 2 - hs.clientWidth / 2);
+  };
+  return { svg, lines, groups };
+}
+
+function renderRushPlayers(D) {
+  const tbl = $('#ru-players');
+  tbl.tHead.replaceChildren(h('tr', {}, [h('th', { text: 'Player' }), h('th', { class: 'num', text: 'Rush runs' }), h('th', { class: 'num', text: 'Best Rush' }),
+    h('th', { class: 'num', text: 'Streak runs' }), h('th', { class: 'num', text: 'Best Streak' }), h('th', { text: 'Last played' })]));
+  const now = Date.now();
+  const runs = (m) => h('td', { class: 'num' }, m.runs + m.left ? [String(m.runs), m.left ? h('span', { class: 'd', text: `+${m.left} left early` }) : null] : '·');
+  const best = (m) => h('td', { class: 'num' }, m.best == null ? '·' : [h('b', { text: String(m.best) }), h('span', { class: 'd', text: when(m.bestT) })]);
+  tbl.tBodies[0].replaceChildren(...D.players.slice().sort((a, b) => (b.rush.best ?? -1) - (a.rush.best ?? -1) || b.last - a.last).map((p) =>
+    h('tr', { class: `click${p.player === state.pick ? ' on' : ''}`, onclick: () => pin(p.player), title: p.kind === 'guest' ? 'guest (no account)' : null }, [
+      h('td', { class: p.kind === 'guest' ? 'g' : null }, [swatch(p.player), p.player]), runs(p.rush), best(p.rush), runs(p.streak), best(p.streak),
+      h('td', { class: 'muted', text: now - p.last < HOUR ? ago(now - p.last) : when(p.last) })])));
+}
+
+// Every move as a point: puzzle rating against time, with the median per 200-point band.
+const THINK = { first: ['first move', 'time from the board taking input to the first touch, on each puzzle\'s first move'],
+  each: ['every move', 'time to the first touch of every move, replies included (later moves are often already planned)'],
+  made: ['move made', 'time to the move being made, every move: thinking plus entering it'] };
+function drawThink(el, runs, pinned) {
+  el.replaceChildren();
+  const view = state.rthink, pts = []; let hidden = 0, late = 0;
+  for (const run of runs) {
+    if (pinned && run.player !== pinned) continue;
+    if (run.late) { late++; continue; }
+    for (const p of run.pz) {
+      if (p.rating == null) continue;
+      if (p.hidden) { hidden++; continue; }
+      for (const m of p.mv) {
+        if (m.open || (view === 'first' && m.n)) continue;
+        const v = view === 'made' ? (m.held ?? m.ms) : m.first;
+        if (v > 0) pts.push({ r: p.rating, v, ok: !!m.correct, run, p, m });
+      }
+    }
+  }
+  $('#ru-think-note').textContent = `${pl(pts.length, 'move')}${pinned ? ` by ${pinned}` : ''}: ${THINK[view][1]}. Log scale. Left out: ${pl(hidden, 'puzzle')} shown while the tab was hidden${late ? `, ${pl(late, 'run')} posted late` : ''}. The rating climbs through a run, so the right side is also later in it${state.rmode === 'rush' ? ', with less clock left' : ''}.`;
+  const W = Math.max(280, el.clientWidth), H = Math.min(320, Math.max(240, R(W * 0.62))), m = { t: 10, r: 12, b: 26, l: 40 };
+  const svg = s('svg', { class: 'th', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Think time against puzzle rating' }); el.append(svg);
+  if (!pts.length) { svg.append(s('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', text: 'No timed moves yet' })); return; }
+  const TK = [20, 50, 100, 200, 500, 1e3, 2e3, 5e3, 10e3, 20e3, 60e3, 120e3, 300e3, 900e3, 3600e3];
+  let vlo = Infinity, vhi = 0, rlo = Infinity, rhi = -Infinity;
+  for (const q of pts) { vlo = Math.min(vlo, q.v); vhi = Math.max(vhi, q.v); rlo = Math.min(rlo, q.r); rhi = Math.max(rhi, q.r); }
+  const lo = TK.findLast((t) => t <= vlo) ?? vlo, hi = TK.find((t) => t >= vhi) ?? vhi;
+  const b0 = Math.floor(rlo / BAND) * BAND, b1 = (Math.floor(rhi / BAND) + 1) * BAND;
+  const x = lin(b0, b1, m.l, W - m.r), ly = lin(Math.log(lo), Math.log(hi), H - m.b, m.t), y = (v) => ly(Math.log(Math.max(lo, Math.min(hi, v))));
+  yGrid(svg, y, TK.filter((t) => t >= lo && t <= hi), m.l, W - m.r, (t) => (t < 60e3 ? `${t / 1000}s` : `${t / 60e3}m`));
+  const every = (W - m.l - m.r) / ((b1 - b0) / BAND) < 40 ? 2 : 1;
+  for (let b = b0, i = 0; b <= b1; b += BAND, i++) {
+    svg.append(s('line', { class: 'gl', x1: x(b), x2: x(b), y1: m.t, y2: H - m.b }));
+    if (i % every === 0) svg.append(s('text', { x: x(b), y: H - 8, 'text-anchor': 'middle', text: b }));
+  }
+  const bands = [];
+  for (let b = b0; b < b1; b += BAND) {
+    const inb = pts.filter((q) => q.r >= b && q.r < b + BAND), num = (a, c) => a - c;
+    const ok = inb.filter((q) => q.ok).map((q) => q.v).sort(num), bad = inb.filter((q) => !q.ok).map((q) => q.v).sort(num);
+    bands.push({ b, cx: x(b + BAND / 2), ok, bad, med: ok.length >= 5 ? quant(ok, 0.5) : null, q1: ok.length >= 5 ? quant(ok, 0.25) : null,
+      q3: ok.length >= 5 ? quant(ok, 0.75) : null, bmed: bad.length >= 3 ? quant(bad, 0.5) : null });
+  }
+  const hits = [];
+  for (const q of pts) if (q.ok) { const px = x(q.r), py = y(q.v); svg.append(s('circle', { class: 'tc', cx: px, cy: py, r: 2 })); hits.push({ px, py, q }); }
+  const mid = bands.filter((b) => b.med != null);
+  if (mid.length > 1) svg.append(s('path', { class: 'rib', d: mid.map((b, i) => `${i ? 'L' : 'M'}${b.cx.toFixed(1)},${y(b.q3).toFixed(1)}`).join('') +
+    mid.slice().reverse().map((b) => `L${b.cx.toFixed(1)},${y(b.q1).toFixed(1)}`).join('') + 'Z' }));
+  for (const q of pts) if (!q.ok) { const px = x(q.r), py = y(q.v); svg.append(s('path', { class: 'tw', d: `M${px - 3},${py - 3}l6,6m0,-6l-6,6` })); hits.push({ px, py, q }); }
+  if (mid.length > 1) svg.append(s('path', { class: 'med', d: mid.map((b, i) => `${i ? 'L' : 'M'}${b.cx.toFixed(1)},${y(b.med).toFixed(1)}`).join('') }));
+  for (const b of bands) {
+    if (b.bmed != null) { const py = y(b.bmed); svg.append(s('path', { class: 'bmed', d: `M${b.cx},${py - 5}l5,5l-5,5l-5,-5Z` })); hits.push({ px: b.cx, py, band: b }); }
+    if (b.med != null) { const py = y(b.med); svg.append(s('circle', { class: 'medp', cx: b.cx, cy: py, r: 3.75 })); hits.push({ px: b.cx, py: py + 0.01, band: b }); }
+  }
+  hover(el, svg, W, hits, (hit) => {
+    if (!hit) return [];
+    if (hit.band) { const b = hit.band; return [h('div', {}, h('b', { text: `Rated ${b.b}–${b.b + BAND - 1}` })),
+      h('div', { text: b.med == null ? pl(b.ok.length, 'correct move') : `correct: median ${secs(b.med)}, middle half ${secs(b.q1)}–${secs(b.q3)} (${pl(b.ok.length, 'move')})` }),
+      h('div', { text: b.bad.length ? `wrong: ${b.bmed == null ? '' : `median ${secs(b.bmed)} `}(${b.bad.length} ${b.bad.length === 1 ? 'move' : 'moves'})` : 'no wrong moves' })]; }
+    const { q } = hit;
+    return [h('div', {}, [swatch(q.run.player), h('b', { text: q.run.player })]),
+      h('div', {}, [h('span', { class: q.ok ? 'ok' : 'bad', text: q.ok ? '✓ correct' : '✗ wrong' }), ` ${q.m.ptn ?? ''} · move ${q.m.n + 1}`]),
+      h('div', { text: `${secs(q.m.first)} to first touch, ${secs(q.m.held ?? q.m.ms)} to the move` }),
+      h('div', { class: 'muted', text: `${q.p.id} · rated ${q.p.rating}${q.m.clock != null ? ` · ${mmss(q.m.clock)} left` : ''}` }),
+      h('div', { class: 'muted', text: when(q.run.t) })];
+  }, 16);
+}
+
+// Finished puzzles of rated players, each with what the two ratings stored on the row predict (plain rating gap).
+function rateRows(runs, pinned) {
+  const rows = [];
+  for (const run of runs) {
+    if (run.late || run.ur == null || (pinned && run.player !== pinned)) continue;
+    for (const p of run.pz) if (p.st < 2 && p.rating != null) rows.push({ run, p, y: p.st, e: elo(run.ur, p.rating) });
+  }
+  return rows;
+}
+function drawRate(el, rows, pinned) {
+  el.replaceChildren();
+  $('#ru-rate-note').textContent = `${pl(rows.length, 'puzzle')}${pinned ? ` by ${pinned}` : ''}, by 200-point rating band. Predicted: 1 / (1 + 10^((puzzle − player) / 400)) from the two ratings stored with each row (as of the post, no rd discount), averaged over the band. Dots well under the line: harder in ${modeName(state.rmode)} than rated. Skipped and unfinished puzzles and late posts left out.`;
+  const W = Math.max(280, el.clientWidth), H = Math.min(320, Math.max(240, R(W * 0.62))), m = { t: 10, r: 12, b: 26, l: 40 };
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Solve rate against puzzle rating, actual and predicted' }); el.append(svg);
+  if (!rows.length) { svg.append(s('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', text: 'No puzzles by rated players yet' })); return; }
+  let rlo = Infinity, rhi = -Infinity; for (const q of rows) { rlo = Math.min(rlo, q.p.rating); rhi = Math.max(rhi, q.p.rating); }
+  const b0 = Math.floor(rlo / BAND) * BAND, b1 = (Math.floor(rhi / BAND) + 1) * BAND;
+  const x = lin(b0, b1, m.l, W - m.r), y = lin(0, 1, H - m.b, m.t);
+  yGrid(svg, y, [0, 0.25, 0.5, 0.75, 1], m.l, W - m.r, pct);
+  const every = (W - m.l - m.r) / ((b1 - b0) / BAND) < 40 ? 2 : 1;
+  for (let b = b0, i = 0; b <= b1; b += BAND, i++) if (i % every === 0) svg.append(s('text', { x: x(b), y: H - 8, 'text-anchor': 'middle', text: b }));
+  const bands = [];
+  for (let b = b0; b < b1; b += BAND) {
+    const inb = rows.filter((q) => q.p.rating >= b && q.p.rating < b + BAND); if (!inb.length) continue;
+    const k = inb.reduce((a, q) => a + q.y, 0), [lo, hi] = wilson(k, inb.length);
+    bands.push({ b, n: inb.length, k, rate: k / inb.length, lo, hi, e: inb.reduce((a, q) => a + q.e, 0) / inb.length, cx: x(b + BAND / 2) });
+  }
+  svg.append(s('path', { d: bands.map((b, i) => `${i ? 'L' : 'M'}${b.cx.toFixed(1)},${y(b.e).toFixed(1)}`).join(''), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }));
+  const hits = [];
+  for (const b of bands) {
+    svg.append(s('circle', { cx: b.cx, cy: y(b.e), r: 3, fill: 'var(--accent)', stroke: 'var(--panel)', 'stroke-width': 1.5 }));
+    svg.append(s('line', { x1: b.cx, x2: b.cx, y1: y(b.lo), y2: y(b.hi), stroke: 'var(--fg)', 'stroke-width': 3, 'stroke-opacity': 0.3, 'stroke-linecap': 'round' }));
+    svg.append(s('circle', { cx: b.cx, cy: y(b.rate), r: 4.5, fill: 'var(--fg)', stroke: 'var(--panel)', 'stroke-width': 1.5 }));
+    hits.push({ px: b.cx, py: y(b.rate), b });
+  }
+  hover(el, svg, W, hits, (hit) => hit ? [h('div', {}, h('b', { text: `Rated ${hit.b.b}–${hit.b.b + BAND - 1}` })),
+    h('div', { text: `solved ${hit.b.k} of ${hit.b.n} (${pct(hit.b.rate)})` }), h('div', { text: `ratings predict ${odds(hit.b.e)}` }),
+    h('div', { class: 'muted', text: `95% range ${pct(hit.b.lo)}–${pct(hit.b.hi)}` })] : [], 60);
+}
+
+// The puzzles whose results the ratings found most surprising: summed log-surprise of the misses, and of the solves.
+function renderOdds(rows) {
+  const by = new Map();
+  for (const q of rows) {
+    if (!by.has(q.p.id)) by.set(q.p.id, { id: q.p.id, rating: q.p.rating, rows: [], e: 0, miss: 0, hit: 0 });
+    const z = by.get(q.p.id); z.rows.push(q); z.rating = q.p.rating; z.e += q.e;
+    if (q.y) z.hit -= Math.log(Math.max(q.e, 1e-9)); else z.miss -= Math.log(Math.max(1 - q.e, 1e-9));
+  }
+  const table = (tbl, list, none) => {
+    tbl.tHead.replaceChildren(h('tr', {}, [h('th', { text: 'Puzzle' }), h('th', { class: 'num', text: 'Rated' }), h('th', { text: 'Who' }), h('th', { class: 'num', text: 'Predicted' })]));
+    tbl.tBodies[0].replaceChildren(...(list.length ? list.map((z) => h('tr', {}, [
+      h('td', {}, h('a', { href: puzzleUrl(z.id), target: '_blank', rel: 'noopener', text: z.id })), h('td', { class: 'num', text: String(z.rating) }),
+      h('td', { class: 'res-cell' }, z.rows.map((q) => h('span', { class: `who-r${!q.y && !q.run.adj ? ' faint' : ''}${q.run.kind === 'guest' ? ' g' : ''}`,
+        title: `${q.run.player} (${q.run.ur}), ${odds(q.e)} predicted, ${when(q.run.t)}${q.p.wrong ? `, played ${q.p.wrong}` : ''}${!q.y && !q.run.adj ? ' (before off-line moves were judged: may be a winning move outside the line)' : ''}` },
+      [h('span', { class: q.y ? 'ok' : 'bad', text: q.y ? '✓' : '✗' }), h('span', { text: who(q.run.player) })]))),
+      h('td', { class: 'num', text: odds(z.e / z.rows.length) })])) : [h('tr', {}, h('td', { colspan: 4, class: 'muted', text: none }))]));
+  };
+  const all = [...by.values()];
+  table($('#ru-missed'), all.filter((z) => z.miss > 0).sort((a, b) => b.miss - a.miss || b.rows.length - a.rows.length).slice(0, 8), 'No misses yet.');
+  table($('#ru-beaten'), all.filter((z) => z.hit >= 0.1).sort((a, b) => b.hit - a.hit).slice(0, 8), 'Nothing solved at under 90% predicted yet.');
+}
+
+// Moves off the puzzle's line (judged since 2026-11-19), play-outs and the clock time the engine was given.
+const VERDICT = { no: 'refuted: a mistake', wins: 'still wins', pending: 'undecided, played out', alt: 'listed alternative', unknown: 'check failed', checking: 'left during the check' };
+function renderOff(runs) {
+  const mv = runs.flatMap((r) => r.mv.filter((m) => m.check != null)), po = runs.flatMap((r) => r.po || []), adj = runs.filter((r) => r.adj);
+  const off = $('#ru-off'), box = $('#ru-po');
+  const med = (xs) => (xs.length ? quant(xs.slice().sort((a, b) => a - b), 0.5) : null);
+  if (!mv.length) off.replaceChildren(h('p', { class: 'note', text: `No moves off the line yet in the ${pl(adj.length, modeName(state.rmode) + ' run')} since they are judged (Nov 19).` }));
+  else off.replaceChildren(h('div', { class: 'wrap' }, h('table', { class: 'mini' }, [
+    h('thead', {}, h('tr', {}, ['Check says', 'Moves', 'Counted right', 'Left open', 'Median check', 'Clock paused'].map((t, i) => h('th', { class: i ? 'num' : null, text: t })))),
+    h('tbody', {}, Object.keys(VERDICT).map((k) => [k, mv.filter((m) => m.check === k)]).filter(([, xs]) => xs.length).map(([k, xs]) => h('tr', {}, [
+      h('td', { text: VERDICT[k] }), h('td', { class: 'num', text: String(xs.length) }), h('td', { class: 'num', text: String(xs.filter((m) => m.correct && !m.open).length) }),
+      h('td', { class: 'num', text: String(xs.filter((m) => m.open).length) }), h('td', { class: 'num', text: secs(med(xs.map((m) => m.checkMs).filter((v) => v != null))) }),
+      h('td', { class: 'num', text: secs(xs.reduce((a, m) => a + m.pause, 0)) })])))])),
+    h('p', { class: 'note', text: `${pl(mv.length, 'checked move')} in ${pl(adj.length, 'run')} since Nov 19. A final answer arrived later for ${mv.filter((m) => m.final != null).length}.` }));
+  const ends = new Map(); for (const o of po) ends.set(o[4] ?? 'none', (ends.get(o[4] ?? 'none') || 0) + 1);
+  const paused = adj.map((r) => r.paused);
+  box.replaceChildren(
+    po.length ? h('div', { class: 'wrap' }, h('table', { class: 'mini' }, [h('thead', {}, h('tr', {}, [h('th', { text: 'Play-out ended' }), h('th', { class: 'num', text: 'Play-outs' })])),
+      h('tbody', {}, [...ends].sort((a, b) => b[1] - a[1]).map(([k, n]) => h('tr', {}, [h('td', { text: k }), h('td', { class: 'num', text: String(n) })])))]))
+      : h('p', { class: 'note', text: 'No play-outs yet: no off-line move has been judged a win or left undecided.' }),
+    h('p', { class: 'note', text: adj.length ? `Clock paused for the engine: ${secs(paused.reduce((a, v) => a + v, 0))} in all over ${pl(adj.length, 'run')}, median ${secs(med(paused))} a run, most ${secs(Math.max(...paused))}.` : 'No runs with pause times yet.' }));
+}
+
+// One run: its puzzles in order.
+function renderRun() {
+  const all = state.rush.runs.filter((r) => r.mode === state.rmode), pick = $('#ru-pick');
+  const run = all.find((r) => r.id === state.rsel) ?? all.at(-1);
+  if (state.rsel != null && run?.id !== state.rsel) state.rsel = null;
+  pick.replaceChildren(...all.slice().reverse().map((r) => new Option(`${when(r.t)} · ${short(r.player)} · ${r.score}${r.left ? ' (left early)' : ''}`, r.id)));
+  if (run) pick.value = run.id;
+  pick.onchange = () => { state.rsel = +pick.value; renderRun(); ruSpot(null); ru.reveal?.(state.rsel); };
+  const line = $('#ru-runline'), strip = $('#ru-strip'), tbl = $('#ru-run');
+  strip.replaceChildren(); tbl.tHead.replaceChildren(); tbl.tBodies[0].replaceChildren(); line.replaceChildren();
+  if (!run) { line.textContent = `No ${modeName(state.rmode)} runs yet.`; return; }
+  line.append(swatch(run.player) ?? '', h('b', { text: run.player }),
+    ` · ${modeName(run.mode)} ${run.score} · ${pl(run.moves, 'move')}, ${pl(run.errors, 'mistake')} · ${run.mode === 'rush' ? `best combo ${run.combo} · ${mmss(run.clockMs)} on the clock` : `${mmss(run.clockMs)} played`}` + // Streak has no combo and no clock
+    `${run.paused ? ` (+${secs(run.paused)} engine)` : ''}${run.ur != null ? ` · rated ${run.ur}` : ''}${run.input ? ` · ${run.input}, ${run.width}` : ''}${run.confirm ? ', confirms moves' : ''}` +
+    `${run.left ? ' · left early' : ''}${run.late ? ' · posted late' : ''}${run.adj ? '' : ' · before off-line moves were judged'}`);
+  const pz = run.pz, cls = (p) => (p.st === 1 ? 'ok' : p.st === 0 ? 'bad' : 'na');
+  const cols = ['#', 'Puzzle', 'Rated', 'Result', 'Time', 'First touch', 'Moves', run.mode === 'rush' ? 'Combo' : null, run.mode === 'rush' ? 'Clock left' : null].filter(Boolean);
+  tbl.tHead.replaceChildren(h('tr', {}, cols.map((t, i) => h('th', { class: [0, 2, 4, 5, 6, 7, 8].includes(i) ? 'num' : null, text: t }))));
+  const rows = pz.map((p) => {
+    const off = p.mv.find((m) => m.check != null);
+    return h('tr', {}, [h('td', { class: 'num muted', text: String(p.pos + 1) }),
+      h('td', {}, h('a', { href: puzzleUrl(p.id), target: '_blank', rel: 'noopener', text: p.id })), h('td', { class: 'num', text: p.rating == null ? '–' : String(p.rating) }),
+      h('td', {}, [h('span', { class: p.st === 1 ? 'ok' : p.st === 0 ? 'bad' : 'muted', text: p.st === 1 ? '✓' : p.st === 0 ? '✗' : p.st === 2 ? 'skipped' : 'unfinished' }),
+        p.wrong ? h('span', { class: 'd', text: p.wrong }) : null, off ? h('span', { class: 'd', text: `off line: ${VERDICT[off.check] ?? off.check}` }) : null,
+        p.hidden ? h('span', { class: 'd', text: 'tab hidden' }) : null]),
+      h('td', { class: 'num', text: secs(p.ms) }), h('td', { class: 'num muted', text: p.mv[0]?.first != null ? secs(p.mv[0].first) : '' }),
+      h('td', { class: 'num muted', title: p.mv.map((m) => m.ptn).filter(Boolean).join(' ') || null, text: String(p.mv.length) }),
+      run.mode === 'rush' ? h('td', { class: 'num', text: p.combo == null ? '' : String(p.combo) }) : null,
+      run.mode === 'rush' ? h('td', { class: 'num muted', text: p.clock == null ? '' : mmss(p.clock) }) : null]);
+  });
+  tbl.tBodies[0].replaceChildren(...rows);
+  if (!pz.length) return;
+
+  // three strips on one x (the order played): rating with the result, time, combo
+  const W = Math.max(280, strip.clientWidth), m = { t: 8, r: 12, b: 22, l: 40 }, gap = 14, hasCombo = run.mode === 'rush' && pz.some((p) => p.combo != null);
+  const hs = [84, 66, hasCombo ? 48 : 0], H = m.t + hs[0] + gap + hs[1] + (hasCombo ? gap + hs[2] : 0) + m.b;
+  const svg = s('svg', { class: 'strip', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': `Run by ${run.player}: rating, time and combo per puzzle` }); strip.append(svg);
+  const n = pz.length, bw = (W - m.l - m.r) / n, cx = (i) => m.l + (i + 0.5) * bw;
+  const label = (t, top) => svg.append(s('text', { x: m.l + 4, y: top + 9, style: 'fill:var(--faint)', text: t }));
+  // rating
+  const rs = pz.map((p) => p.rating).filter((v) => v != null), rt = nice(Math.min(...rs), Math.max(...rs), 3), t0 = m.t, yr = lin(rt.lo, rt.hi, t0 + hs[0], t0);
+  yGrid(svg, yr, rt.ticks, m.l, W - m.r);
+  svg.append(s('path', { class: 'rl', d: pz.filter((p) => p.rating != null).map((p, i) => `${i ? 'L' : 'M'}${cx(p.pos).toFixed(1)},${yr(p.rating).toFixed(1)}`).join('') }));
+  for (const p of pz) if (p.rating != null) svg.append(s('circle', { class: cls(p), cx: cx(p.pos), cy: yr(p.rating), r: Math.min(3.5, Math.max(2, bw * 0.3)) }));
+  label('puzzle rating', t0 - 2);
+  // time, capped so one long think doesn't flatten the rest
+  const ms = pz.map((p) => p.ms).sort((a, b) => a - b), cap = Math.min(ms.at(-1), Math.max(5e3, quant(ms, 0.9) * 1.6)), tt = msTicks(cap, 3);
+  const t1 = t0 + hs[0] + gap, yt = lin(0, tt.hi, t1 + hs[1], t1);
+  yGrid(svg, yt, tt.ticks, m.l, W - m.r, (v) => `${v / 1000}s`);
+  for (const p of pz) {
+    const top = yt(Math.min(p.ms, tt.hi));
+    svg.append(s('rect', { class: `bar ${cls(p)}`, x: cx(p.pos) - Math.max(1, bw * 0.36), width: Math.max(2, bw * 0.72), y: top, height: Math.max(1, t1 + hs[1] - top), rx: 1 }));
+    if (p.ms > tt.hi) svg.append(s('text', { x: cx(p.pos), y: top - 3, 'text-anchor': 'middle', style: 'fill:var(--fg)', text: secs(p.ms) }));
+  }
+  label('time on the puzzle', t1 - 2);
+  // combo after each puzzle
+  const t2 = t1 + hs[1] + gap;
+  if (hasCombo) {
+    const ct = nice(0, Math.max(4, ...pz.map((p) => p.combo || 0)), 2), yc = lin(0, ct.hi, t2 + hs[2], t2);
+    yGrid(svg, yc, ct.ticks, m.l, W - m.r);
+    let d = '';
+    pz.forEach((p, i) => { const a = m.l + i * bw, b = a + bw, v = yc(p.combo || 0).toFixed(1); d += `${i ? 'L' : 'M'}${a.toFixed(1)},${v}L${b.toFixed(1)},${v}`; });
+    svg.append(s('path', { class: 'cb', d: `${d}L${(m.l + n * bw).toFixed(1)},${yc(0)}L${m.l},${yc(0)}Z` }), s('path', { class: 'cl', d }));
+    label('combo', t2 - 2);
+  }
+  const step = [1, 2, 5, 10, 20, 50].find((v) => (n / v) * 26 <= W - m.l - m.r) ?? 100;
+  for (let i = step; i <= n; i += step) svg.append(s('text', { x: cx(i - 1), y: H - 6, 'text-anchor': 'middle', text: i }));
+  svg.append(s('text', { x: m.l - 6, y: H - 6, 'text-anchor': 'end', text: '#' }));
+  // pointer: the puzzle in that column, its row lit in the table
+  const cross = s('line', { class: 'cross', y1: m.t, y2: H - m.b }); svg.append(cross);
+  const tip = h('div', { class: 'tip', role: 'status' }); strip.append(tip);
+  const wrap = $('#ru-run-wrap');
+  let lit = null;
+  const light = (tr) => { if (lit === tr) return; lit?.classList.remove('on'); lit = tr; tr?.classList.add('on');
+    if (tr) { const top = tr.offsetTop - tbl.tHead.offsetHeight, bot = tr.offsetTop + tr.offsetHeight; if (top < wrap.scrollTop) wrap.scrollTop = top; else if (bot > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = bot - wrap.clientHeight; } };
+  const move = (ev) => {
+    const box = svg.getBoundingClientRect(), k = W / box.width, mx = (ev.clientX - box.left) * k, i = Math.max(0, Math.min(n - 1, Math.floor((mx - m.l) / bw))), p = pz[i];
+    cross.setAttribute('x1', cx(i)); cross.setAttribute('x2', cx(i)); cross.style.opacity = 0.5;
+    tip.replaceChildren(h('div', {}, [h('b', { text: `#${p.pos + 1} ` }), p.id, ` · rated ${p.rating ?? '–'}`]),
+      h('div', {}, [h('span', { class: p.st === 1 ? 'ok' : p.st === 0 ? 'bad' : 'muted', text: p.st === 1 ? '✓ solved' : p.st === 0 ? '✗ missed' : p.st === 2 ? 'skipped' : 'unfinished' }),
+        `${p.wrong ? ` (${p.wrong})` : ''} in ${secs(p.ms)} · ${p.mv.length} ${p.mv.length === 1 ? 'move' : 'moves'}`]),
+      h('div', { class: 'muted', text: [p.mv[0]?.first != null ? `first touch ${secs(p.mv[0].first)}` : null, p.combo != null ? `combo ${p.combo}` : null, p.clock != null ? `${mmss(p.clock)} left` : null].filter(Boolean).join(' · ') }));
+    placeTip(tip, strip, cx(i) / k, (m.t + 10) / k);
+    light(rows[i]);
+  };
+  svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move);
+  svg.addEventListener('pointerleave', () => { cross.style.opacity = 0; tip.style.opacity = 0; light(null); });
+}
+
+function renderRush() {
+  const D = state.rush, body = $('#ru-body'), empty = $('#ru-empty');
+  if (!D || !D.total) {
+    body.hidden = true; empty.hidden = false; $('#ru-count').textContent = ''; $('#ru-mode').replaceChildren();
+    empty.textContent = D ? 'No Rush or Streak runs yet.' : state.rushErr === 'http' ? 'Rush and Streak data unavailable (see the server log).' : state.rushErr ? 'Can’t reach the server.' : 'Loading…';
+    return;
+  }
+  body.hidden = false; empty.hidden = true;
+  $('#ru-count').textContent = `${pl(D.total, 'run')} · ${pl(D.players.length, 'player')}${D.total > D.shown ? ` · everything below the players table uses the latest ${D.shown}` : ''}`;
+  const count = (m) => D.runs.filter((r) => r.mode === m).length;
+  $('#ru-mode').replaceChildren(...['rush', 'streak'].map((k) => h('button', { 'aria-pressed': String(k === state.rmode), text: `${modeName(k)} ${count(k)}`,
+    onclick: () => { state.rmode = k; state.rsel = null; ru.tpos = null; try { localStorage.setItem('tp-rmode', k); } catch {} renderRush(); } })));
+  $('#ru-think-seg').replaceChildren(...Object.entries(THINK).map(([k, [label]]) => h('button', { 'aria-pressed': String(k === state.rthink), text: label,
+    onclick: () => { state.rthink = k; try { localStorage.setItem('tp-rthink', k); } catch {} const v = rushRuns(); drawThink($('#ru-think'), v.runs, v.pinned); } })));
+  renderRushPlayers(D);
+  $('#ru-clock').parentElement.hidden = state.rmode === 'streak'; // Streak has no clock
+  const { runs, pinned } = rushRuns();
+  ru.charts = [
+    drawTime($('#ru-time'), runs, pinned),
+    drawRuns($('#ru-solved'), runs, { pts: (r) => r.traj, miss: (r) => r.miss, at: (t, v) => `${mmss(t)} on the clock · ${R(v)} solved`,
+      aria: 'Puzzles solved against clock time, one line per run', empty: `No ${modeName(state.rmode)} runs with move times yet` }),
+    drawRuns($('#ru-clock'), runs, { pts: (r) => r.clock, miss: (r) => r.cmiss, yms: true, at: (t, v) => `${mmss(t)} in · ${mmss(v)} left`,
+      aria: 'Clock left against real time, one line per Rush run', empty: state.rmode === 'streak' ? 'Streak has no clock' : 'No Rush runs with clock times yet' }),
+  ].filter(Boolean);
+  ru.lit = undefined; ruSpot(null);
+  drawThink($('#ru-think'), runs, pinned);
+  const rows = rateRows(runs, pinned);
+  drawRate($('#ru-rate'), rows, pinned);
+  renderOdds(rows);
+  renderOff(runs);
+  renderRun();
+}
+
+async function pollRush() {
+  let r = null;
+  try { r = await fetch('rush.json', { cache: 'no-store', headers: state.retag ? { 'if-none-match': state.retag } : {} }); } catch { /* no answer */ }
+  if (r?.status === 304) return;
+  try {
+    if (!r || !r.ok) throw new Error(r?.status);
+    const d = await r.json();
+    prepRush(d);
+    state.rush = d; state.retag = r.headers.get('etag'); state.rushErr = '';
+  } catch { if (state.rush) return; state.rushErr = r ? 'http' : 'net'; } // 'http': the server answered, with an error; 'net': it didn't answer
+  renderRush();
+}
+
+// ---------- page ----------
+function renderControls(ps) {
+  $('#range').replaceChildren(...Object.entries(RANGES).map(([k, [label]]) => h('button', { 'aria-pressed': String(k === state.range), text: label,
+    onclick: () => { state.range = k; try { localStorage.setItem('tp-range', k); } catch {} render(); } })));
+  const pick = $('#pick');
+  const sorted = ps.slice().sort((a, b) => (a.kind === b.kind ? b.last - a.last : a.kind === 'account' ? -1 : 1));
+  pick.replaceChildren(new Option('nobody', ''), ...sorted.map((p) => new Option(`${p.player} (${p.rating})`, p.player)));
+  pick.value = state.pick;
+}
+function render(clockOnly) { // clockOnly: the once-a-minute refresh of relative times, with no new data
+  const ps = players(state.rows, tMin());
+  if (state.pick && !ps.some((p) => p.player === state.pick)) state.pick = '';
+  state.slot = slots(ps);
+  renderControls(ps);
+  renderToday(ps);
+  drawRating();
+  renderPlayers(ps);
+  renderRecent();
+  renderPuzzles();
+  if (!clockOnly) renderRush(); else if (state.rush?.total) renderRushPlayers(state.rush); // a full redraw would drop a hover for nothing
+  state.seen = new Set(state.rows.map(key));
+  state.drawn = Date.now();
+}
+
+async function poll() {
+  let r = null, d = null;
+  try { r = await fetch('data.json', { cache: 'no-store', headers: state.etag ? { 'if-none-match': state.etag } : {} }); } catch { /* no answer */ }
+  try { if (r?.ok) d = await r.json(); } catch { /* an answer that is not the data */ }
+  // down: why this poll brought nothing. 'net': no answer (the server or the tailnet is down); 'http': it answered with an error
+  state.down = !r ? 'net' : r.status === 304 || d ? '' : 'http';
+  try {
+    if (r?.status === 304) { state.lastOk = Date.now(); if (Date.now() - state.drawn > 60e3) render(true); }
+    else if (d) {
+      state.rows = d.rows; state.accounts = d.accounts || null; state.puzzles = d.puzzles || null; state.etag = r.headers.get('etag'); state.lastOk = Date.now();
+      render();
+    }
+  } catch { /* keep the last data; the status line says how old it is */ }
+  tick();
+  pollRush();
+}
+function tick() {
+  const el = $('#status'), txt = el.lastElementChild;
+  const http = state.down === 'http';
+  if (!state.lastOk) { txt.textContent = http ? 'server error, see the server log' : 'can’t reach the server'; el.className = 'stale'; return; }
+  const age = Date.now() - state.lastOk, last = state.rows.at(-1), dur = ago(age).replace(' ago', '');
+  txt.textContent = age > 60e3 ? (http ? `server error for ${dur}, see the server log` : `server unreachable for ${dur}`) : last ? `live · last attempt ${ago(Date.now() - last.t)}` : 'live · no attempts yet';
+  el.className = age > 60e3 ? 'stale' : '';
+}
+try { state.pick = localStorage.getItem('tp-pick') || ''; } catch {}
+$('#pick').onchange = (e) => { state.pick = e.target.value; try { localStorage.setItem('tp-pick', state.pick); } catch {} render(); };
+let rt, lastW = innerWidth; addEventListener('resize', () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rt); rt = setTimeout(render, 150); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+poll(); setInterval(poll, 15000); setInterval(tick, 5000);
+</script>
+</body>
+</html>

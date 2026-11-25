@@ -1,0 +1,11 @@
+.DS_Store
+data/
+data/*.db
+data/*.db-*
+data/puzzles-local/
+data/raw/
+node_modules/
+deploy/
+wasm/syntaks/.src/
+wasm/syntaks/.src-net/
+public/syntaks/syntaks.wasm

@@ -1,0 +1,2 @@
+<!-- iOS home screen: full-bleed square (iOS rounds the corners itself), logo ~62% wide, a hair above centre. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#262421"/><g fill="#e8e6e3" transform="translate(6.1 7.4) scale(0.9)"><path d="M5 6A6 6 0 0 1 17 6Z"/><rect y="8" width="22" height="4" rx="1.3"/><rect y="14" width="22" height="4" rx="1.3"/></g></svg>

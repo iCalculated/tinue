@@ -1,0 +1,15 @@
+{
+  "name": "tinue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lichess-style Tak puzzle trainer",
+  "scripts": {
+    "start": "node server/server.js",
+    "perft": "node scripts/perft.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "model": "node scripts/test-next-model.mjs 6 20000",
+    "verify": "uv run scripts/verify-picker.py"
+  },
+  "engines": { "node": ">=22.13" }
+}

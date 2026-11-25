@@ -1,0 +1,248 @@
+<title>Tinue vs Lichess Mining</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a game-timeline figure up top (where each miner picks the puzzle), then a stage-by-stage ladder, Lichess left, tinue right. */
+:root {
+  --bg: #f6f3ee;          /* light square */
+  --panel: #fffdf9;
+  --ink: #26221d;
+  --mute: #6f675d;
+  --rule: #ddd5c8;
+  --chess: #3d6a8f;       /* Lichess lane: cool slate */
+  --chess-soft: #e3ecf3;
+  --tak: #a2591f;         /* tinue lane: dark wood */
+  --tak-soft: #f5e6d6;
+  --proof: #6f8f2f;       /* proved region */
+  --proof-soft: rgba(111,143,47,.16);
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1b1916; --panel: #24211d; --ink: #ece6dc; --mute: #a59c8f; --rule: #3a352e;
+  --chess: #8bb6d9; --chess-soft: #22313d; --tak: #e39a5c; --tak-soft: #3a2a1c;
+  --proof: #a9c66a; --proof-soft: rgba(169,198,106,.16); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1b1916; --panel: #24211d; --ink: #ece6dc; --mute: #a59c8f; --rule: #3a352e;
+  --chess: #8bb6d9; --chess-soft: #22313d; --tak: #e39a5c; --tak-soft: #3a2a1c;
+  --proof: #a9c66a; --proof-soft: rgba(169,198,106,.16); color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.page { max-width: 1060px; margin: 0 auto; padding-block: 36px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font: 700 clamp(30px, 5vw, 46px)/1.05 var(--display); letter-spacing: -.01em; margin: 0 0 10px; text-wrap: balance; }
+h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; text-wrap: balance; }
+.lede { color: var(--mute); max-width: 64ch; margin: 0 0 28px; }
+.lede b { color: var(--ink); font-weight: 600; }
+.k-chess { color: var(--chess); font-weight: 600; }
+.k-tak { color: var(--tak); font-weight: 600; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+
+/* figure */
+figure { margin: 0 0 40px; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 20px 18px 14px; }
+figure .scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; min-width: 780px; height: auto; }
+figcaption { color: var(--mute); font-size: 13px; margin-top: 8px; max-width: 80ch; }
+svg text { font-family: var(--body); fill: var(--ink); }
+svg .small { font-size: 11px; fill: var(--mute); }
+svg .lab { font-size: 12.5px; font-weight: 600; }
+svg .mono { font-family: var(--mono); font-size: 11px; }
+
+/* ladder */
+.lanes-head, .row { display: grid; grid-template-columns: 150px 1fr 1fr; gap: 0 22px; }
+.lanes-head { position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 2; padding: 10px 0 8px; border-bottom: 2px solid var(--ink); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.lanes-head div { font: 700 17px/1.2 var(--display); }
+.lanes-head .c { color: var(--chess); } .lanes-head .t { color: var(--tak); }
+.row { padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.stage { font: 600 14px/1.3 var(--body); }
+.stage .chip { display: inline-block; margin-top: 6px; font: 500 11px/1 var(--body); padding: 4px 7px; border-radius: 99px; border: 1px solid var(--rule); color: var(--mute); }
+.chip.diff { border-color: var(--tak); color: var(--tak); }
+.chip.same { border-color: var(--proof); color: var(--proof); }
+.cell { min-width: 0; }
+.cell p { margin: 0 0 6px; }
+.cell .n { display: block; color: var(--mute); font-size: 13px; }
+.cell .lane-tag { display: none; font: 600 12px/1 var(--body); margin-bottom: 6px; }
+.c-cell { border-left: 3px solid var(--chess-soft); padding-left: 12px; }
+.t-cell { border-left: 3px solid var(--tak-soft); padding-left: 12px; }
+.variants { display: grid; gap: 6px; margin-top: 4px; }
+.variants div { font-size: 13.5px; }
+.variants b { font-weight: 600; }
+.status { font: 500 11px/1 var(--body); color: var(--mute); border: 1px dashed var(--rule); border-radius: 4px; padding: 2px 5px; margin-left: 4px; white-space: nowrap; }
+
+.takeaway { margin-top: 36px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.takeaway section { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; }
+.takeaway h3 { font: 700 16px/1.25 var(--display); margin: 0 0 6px; }
+.takeaway p { margin: 0; color: var(--mute); font-size: 14px; }
+.foot { color: var(--mute); font-size: 12.5px; margin-top: 28px; max-width: 80ch; }
+
+@media (max-width: 720px) {
+  .lanes-head { display: none; }
+  .row { grid-template-columns: 1fr; gap: 10px; }
+  .cell .lane-tag { display: block; }
+  .c-cell .lane-tag { color: var(--chess); } .t-cell .lane-tag { color: var(--tak); }
+}
+</style>
+
+<div class="page">
+  <h1>Where a puzzle comes from</h1>
+  <p class="lede">How <span class="k-chess">Lichess</span> turns chess games into puzzles, next to how <span class="k-tak">tinue</span> does it for Tak. The main split: Lichess <b>trusts an engine's evaluation</b> and demands a single right move at every step. Tinue <b>proves the forced road</b> and accepts every winning move. It checks after the fact whether the position actually swung the game.</p>
+
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 900 330" role="img" aria-labelledby="figt figd">
+      <title id="figt">One game, three ways to find the puzzle</title>
+      <desc id="figd">A winning-chance curve across a game. Lichess scans forward and stops at the jump after the opponent's mistake. Tinue's live and deep miners walk backward from the final road, two plies at a time, and stop at the earliest position where the road is still forced. The swing miner scans forward like Lichess, using Tiltak.</desc>
+      <defs>
+        <marker id="ac" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--chess)"/></marker>
+        <marker id="at" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--tak)"/></marker>
+      </defs>
+      <!-- axes: plies 0..60 → x 70..850 (13px/ply); chance 0..1 → y 250..70 -->
+      <line x1="70" y1="250" x2="850" y2="250" stroke="var(--rule)"/>
+      <line x1="70" y1="70" x2="70" y2="250" stroke="var(--rule)"/>
+      <line x1="70" y1="160" x2="850" y2="160" stroke="var(--rule)" stroke-dasharray="3 4"/>
+      <text class="small" x="62" y="74" text-anchor="end">win</text>
+      <text class="small" x="62" y="164" text-anchor="end">even</text>
+      <text class="small" x="62" y="254" text-anchor="end">loss</text>
+      <text class="small" x="70" y="270">ply 0</text>
+      <text class="small" x="850" y="270" text-anchor="end">game ends: road</text>
+      <text class="small" x="70" y="58">solver's winning chance</text>
+
+      <!-- proved region: forced road from ply 46 (x=668) to the end (ply 60, x=850) -->
+      <rect x="668" y="70" width="182" height="180" fill="var(--proof-soft)"/>
+      <text class="lab" x="759" y="186" text-anchor="middle" style="fill:var(--proof)">road is forced</text>
+      <text class="small" x="759" y="201" text-anchor="middle">(proved, not estimated)</text>
+
+      <!-- eval curve: hovers near even, opponent's mistake at ply 45→46 -->
+      <path d="M70 160 C120 150 150 172 200 165 S300 140 340 152 S420 176 470 168 S560 148 600 158 S640 170 655 166 L668 92 C700 86 760 80 850 72" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <circle cx="668" cy="92" r="4.5" fill="var(--ink)"/>
+      <text class="small" x="652" y="205" text-anchor="end">opponent's mistake</text>
+      <line x1="655" y1="194" x2="663" y2="172" stroke="var(--mute)"/>
+
+      <!-- Lichess: forward scan -->
+      <line x1="80" y1="292" x2="652" y2="292" stroke="var(--chess)" stroke-width="2.2" marker-end="url(#ac)"/>
+      <text class="lab" x="80" y="284" style="fill:var(--chess)">Lichess scans forward with stored Stockfish evals</text>
+      <text class="small" x="80" y="310">stops at the first jump of more than 0.6 in winning chance (on a −1 to 1 scale) after the opponent's move</text>
+
+      <!-- tinue swing: forward, Tiltak -->
+      <line x1="80" y1="40" x2="652" y2="40" stroke="var(--tak)" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#at)"/>
+      <text class="small" x="80" y="32"><tspan class="lab" style="fill:var(--tak)">tinue swing miner</tspan> scans forward with Tiltak too: jump of 0.30 or more, then a proof</text>
+
+      <!-- tinue backward walk: 1,3,5 live; 7..15 deep -->
+      <g>
+        <line x1="850" y1="122" x2="672" y2="122" stroke="var(--tak)" stroke-width="2.2" marker-end="url(#at)"/>
+        <!-- step ticks every 2 plies (26px) back from the end -->
+        <g fill="var(--tak)">
+          <circle cx="837" cy="122" r="3"/><circle cx="811" cy="122" r="3"/><circle cx="785" cy="122" r="3"/>
+          <circle cx="759" cy="122" r="3" fill="var(--panel)" stroke="var(--tak)"/><circle cx="733" cy="122" r="3" fill="var(--panel)" stroke="var(--tak)"/>
+          <circle cx="707" cy="122" r="3" fill="var(--panel)" stroke="var(--tak)"/><circle cx="681" cy="122" r="3" fill="var(--panel)" stroke="var(--tak)"/>
+        </g>
+        <text class="mono" x="837" y="140" text-anchor="middle">1</text><text class="mono" x="811" y="140" text-anchor="middle">3</text><text class="mono" x="785" y="140" text-anchor="middle">5</text>
+        <text class="mono" x="759" y="140" text-anchor="middle">7</text><text class="mono" x="733" y="140" text-anchor="middle">9</text><text class="mono" x="707" y="140" text-anchor="middle">11</text><text class="mono" x="681" y="140" text-anchor="middle">13</text>
+        <text class="small" x="811" y="156" text-anchor="middle">live</text>
+        <text class="small" x="720" y="156" text-anchor="middle">deep</text>
+        <text class="lab" x="845" y="230" text-anchor="end" style="fill:var(--tak)">tinue walks back from the road</text>
+        <text class="small" x="845" y="244" text-anchor="end">takes the earliest position still proved</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Schematic (on a phone, scroll the figure sideways).Both approaches land on the same kind of moment, the move after the opponent's mistake, from opposite ends of the game. The backward walk only sees the final forced streak: a tactic the winner missed, or a game won on flats or time, never shows up. That gap is why the swing miner exists.</figcaption>
+  </figure>
+
+  <div class="lanes-head" aria-hidden="true"><div></div><div class="c">Lichess (chess)</div><div class="t">tinue (Tak)</div></div>
+
+  <div class="row">
+    <div class="stage">Games<br><span class="chip diff">different scale</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>Monthly dumps of rated games, but only games Lichess has already analysed with Stockfish (the move text carries evals).</p>
+      <span class="n">About 600 million analysed games scanned. Games are graded by both players' ratings and the time control. The lowest grade (a player at 1500 or below, or a time control lasting about a minute or less) is skipped. Lower grades only yield longer puzzles.</span></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>The PlayTak dump: 880,521 games. Rated, swap opening, standard piece counts, no guests, sizes 4×4 to 8×8.</p>
+      <span class="n">The live miner has no rating floor and uses road wins only. The deep and swing miners require both players at 1500+ and stick to 5×5 and 6×6.</span></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">Finding the moment<br><span class="chip diff">opposite direction</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>Scan forward. Candidate: the opponent's move makes the solver's winning chance jump by more than 0.6 (on a −1 to 1 scale), or reveals a mate in 14 or fewer.</p>
+      <span class="n">Rejected if the solver was already above +3 pawns before the mistake (unless it's now a short mate), or already up material.</span></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <div class="variants">
+        <div><b>Live:</b> walk back from the final road 1, 3 and 5 plies. Take the earliest position with a forced road.</div>
+        <div><b>Deep:</b> keep walking back, 7–15 plies, until the road is no longer forced. <span class="status">mined, not live</span></div>
+        <div><b>Swing:</b> scan forward like Lichess with Tiltak: the solver jumps by at least 0.30, or the loser drops by that much. Then prove the road. <span class="status">mining now</span></div>
+      </div></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">What “the solution works” means<br><span class="chip diff">eval vs proof</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>Stockfish, up to 25M nodes per move, best two lines. <b>Mate</b> puzzles must reach checkmate. <b>Advantage</b> puzzles must stay at +2 pawns or better and end when the next move is no longer the only one.</p>
+      <span class="n">Endgames with 7 or fewer pieces check the tablebase first.</span></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>A proof, not an estimate: every line ends in a road (or a flat win). Exhaustive search up to 5 plies. Proof-number search (df-pn) for 7–15 plies, with an exact shortest length.</p>
+      <span class="n">No “advantage” puzzles. A road is reached or it isn't.</span></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">Other good moves<br><span class="chip diff">opposite policy</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>Every solver move must be the <i>only</i> good move: winning chance at least 0.7 above the second-best. A mate line with another mate at any non-final step is thrown out.</p>
+      <span class="n">The exception: on the last move, any checkmate counts.</span></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>Every move that wins in the shortest time is stored and accepted. A slower win gets “That wins too, but slower” with no penalty to the solver.</p>
+      <span class="n">The puzzle itself is served less often (+100 handicap). Unique first move: 61% of the live set, 71% of the deep mine.</span></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">Opponent's replies<br><span class="chip diff">different aim</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>Whatever Stockfish plays.</p></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>The most stubborn reply: survive longest, then leave the fewest winning answers, then follow the real game. Precomputed, so the browser never searches during the puzzle.</p></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">Did it change the game?<br><span class="chip same">same question, asked later</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>Built into detection: the eval jump <i>is</i> the turning point.</p></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>A separate scoring pass with Tiltak over the proved puzzles, refined three times. A turning point needs all of these:</p>
+      <span class="n">the solver was at most 50% before the mistake; the loser wasn't already lost (a proof); the loser had an escape (where that can be checked exactly); no non-winning move scores 0.65 or higher; no slower wins. Puzzles that fail are served less, not deleted. Live: 1,836 turning points.</span></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">Themes<br><span class="chip same">same approach</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>A rule-based tagger over the solution: about 30 motifs (fork, pin, skewer, sacrifice, zugzwang…) plus mate patterns. Players can vote themes up or down.</p></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>The same idea with Tak motifs: fork, smash, throw, spread, reveal, wall block, stack road, gaelet, quiet move, dragon. No theme voting.</p></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">Starting rating<br><span class="chip diff">prior vs flat</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>Every puzzle starts at 1500 ± 500 and settles from players' attempts (Glicko-2).</p></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>A guess from the puzzle's features, ± 250: 900 / 1500 / 2100 for 1 / 3 / 5 plies, deep 2400–2850. Nudges for smash, throws, quiet moves, board size, search effort and how many first moves win. Then Glicko-2 like Lichess.</p>
+      <span class="n">Too few players to start everything at 1500 and let them sort it out.</span></div>
+  </div>
+
+  <div class="row">
+    <div class="stage">Quality control and serving<br><span class="chip diff">votes vs handicaps</span></div>
+    <div class="cell c-cell"><span class="lane-tag">Lichess</span>
+      <p>No human review today. Up/down votes are weighted by player trust, and the bottom 5% by vote is never served. A hand-kept blocklist removes bad puzzles. Puzzles are served from rating buckets.</p></div>
+    <div class="cell t-cell"><span class="lane-tag">tinue</span>
+      <p>No votes. The closest rating to yours wins after handicaps: turning points first, unscored +150, flawed +100, “just converting a won game” +250.</p></div>
+  </div>
+
+  <div class="takeaway">
+    <section><h3>Why tinue proves instead of estimating</h3><p>A Tak road is a yes/no fact a search can certify within 15 plies. A proof makes every puzzle sound whatever an engine's evaluation says. Tiltak is then used only to judge whether the moment mattered.</p></section>
+    <section><h3>Why tinue accepts every win</h3><p>Tak positions often have several roads. Lichess's only-move rule would discard about 40% of our multi-move puzzles, which are perfectly good to solve.</p></section>
+    <section><h3>What tinue borrowed</h3><p>The forward eval-jump scan (swing miner), the rule-based tagger, Glicko-2 with first-attempt-only rating, and damped puzzle ratings when a theme hints at the answer.</p></section>
+  </div>
+
+  <p class="foot">Sources: lichess-puzzler (generator, tagger, validator) and lila's puzzle module, read 2026-11-08. Tinue's numbers come from its own scripts and the live database. Each side was mapped from source and then checked by two independent reviewers.</p>
+</div>

@@ -1,0 +1,238 @@
+diff --git a/src/search.rs b/src/search.rs
+index a427622..b1128eb 100644
+--- a/src/search.rs
++++ b/src/search.rs
+@@ -34,13 +34,16 @@ use crate::tei::TeiOptions;
+ use crate::thread::{PvList, RootMove, SharedContext, TerminalState, ThreadData, set_pv, update_pv};
+ use crate::ttable::{ProbedEntry, TtFlag};
+ use crate::tune::Val;
++#[cfg(not(target_os = "wasi"))]
+ use crate::util::command_channel::{Receiver, Sender, channel};
+ use crate::wdl;
+ use crate::{core::*, tunable};
+ use std::collections::{HashMap, HashSet};
+ use std::io::Write;
+ use std::sync::Arc;
++#[cfg(not(target_os = "wasi"))]
+ use std::thread;
++#[cfg(not(target_os = "wasi"))]
+ use std::thread::JoinHandle;
+ use std::time::Instant;
+ 
+@@ -1237,6 +1240,7 @@ fn final_report(shared: &SharedContext, ctx: &SearchContext) {
+ }
+ 
+ #[derive(Clone)]
++#[cfg(not(target_os = "wasi"))]
+ #[allow(clippy::large_enum_variant)]
+ enum ThreadCommand {
+     Ping,
+@@ -1245,12 +1249,14 @@ enum ThreadCommand {
+     Quit,
+ }
+ 
++#[cfg(not(target_os = "wasi"))]
+ pub struct Searcher {
+     shared_ctx: Arc<SharedContext>,
+     threads: Vec<JoinHandle<()>>,
+     sender: Sender<ThreadCommand>,
+ }
+ 
++#[cfg(not(target_os = "wasi"))]
+ impl Searcher {
+     pub fn new(tt_size_mib: usize) -> Self {
+         let shared_ctx = Arc::new(SharedContext::new(tt_size_mib));
+@@ -1420,6 +1426,99 @@ impl Searcher {
+     }
+ }
+ 
++// WASI (tinue's in-browser build): no threads, so the search runs inline on the calling thread, with one
++// ThreadData kept for the engine's lifetime. Same interface as the threaded searcher; Threads is fixed at 1.
++#[cfg(target_os = "wasi")]
++pub struct Searcher {
++    shared_ctx: Arc<SharedContext>,
++    data: ThreadData<'static>,
++}
++
++#[cfg(target_os = "wasi")]
++impl Searcher {
++    pub fn new(tt_size_mib: usize) -> Self {
++        let hist: &'static History = Box::leak(History::boxed());
++        let corrhist: &'static CorrectionHistory = Box::leak(CorrectionHistory::boxed());
++        let mut shared_ctx = SharedContext::new(tt_size_mib);
++        shared_ctx.set_threads(1);
++        Self {
++            shared_ctx: Arc::new(shared_ctx),
++            data: ThreadData::new(0, hist, corrhist),
++        }
++    }
++
++    #[allow(clippy::too_many_arguments)]
++    pub fn start_search(
++        &mut self,
++        pos: &Position,
++        new_key_history: &[u64],
++        start_time: Instant,
++        limits: Limits,
++        max_depth: i32,
++        moves_to_search: &[Move],
++        moves_to_exclude: &HashSet<Move>,
++        options: &TeiOptions,
++    ) {
++        self.modify_shared_ctx(|ctx| {
++            ctx.init_search(options, start_time, limits, 1);
++        });
++
++        let root_moves = init_root_moves(pos, moves_to_search, moves_to_exclude);
++        let multipv = options.multipv.min(root_moves.len());
++
++        let ctx = SearchContext::new(
++            max_depth,
++            multipv,
++            *pos,
++            Arc::new(root_moves),
++            Arc::new(new_key_history.to_vec()),
++        );
++
++        run_search(self.shared_ctx.clone(), &ctx, &mut self.data);
++    }
++
++    pub fn stop(&mut self) {
++        self.shared_ctx.stop();
++    }
++
++    pub fn is_searching(&self) -> bool {
++        self.shared_ctx.is_searching()
++    }
++
++    pub fn wait(&self) {}
++
++    #[must_use]
++    pub fn total_nodes(&self) -> usize {
++        self.shared_ctx.total_nodes()
++    }
++
++    fn modify_shared_ctx<F>(&mut self, func: F)
++    where
++        F: Fn(&mut SharedContext),
++    {
++        let ctx =
++            Arc::get_mut(&mut self.shared_ctx).expect("shared search context still referenced by a search thread");
++        func(ctx);
++    }
++
++    pub fn reset(&mut self) {
++        self.modify_shared_ctx(|ctx| {
++            ctx.tt.clear(1);
++        });
++        self.data.corrhist.clear();
++        self.data.history.clear();
++        self.data.killers.fill(Default::default());
++    }
++
++    pub fn set_tt_size(&mut self, size_mib: usize) {
++        self.modify_shared_ctx(|ctx| {
++            ctx.tt.resize(size_mib, 1);
++        });
++    }
++
++    pub fn set_threads(&mut self, _count: u32) {}
++}
++
+ fn init_root_moves(root_pos: &Position, moves_to_search: &[Move], moves_to_exclude: &HashSet<Move>) -> Vec<RootMove> {
+     let mut moves = Vec::with_capacity(1024);
+ 
+@@ -1451,6 +1550,7 @@ fn init_root_moves(root_pos: &Position, moves_to_search: &[Move], moves_to_exclu
+     moves.iter().map(|&mv| RootMove::new(mv)).collect()
+ }
+ 
++#[cfg(not(target_os = "wasi"))]
+ impl Drop for Searcher {
+     fn drop(&mut self) {
+         self.kill_threads();
+diff --git a/src/tei.rs b/src/tei.rs
+index ab95223..7ad6287 100644
+--- a/src/tei.rs
++++ b/src/tei.rs
+@@ -143,11 +143,20 @@ impl TeiHandler {
+             }
+ 
+             let start_time = Instant::now();
++            let quit = !self.dispatch(&line, start_time);
++            line.clear();
++            if quit {
++                break;
++            }
++        }
++    }
+ 
++    // One TEI line; false on quit.
++    fn dispatch(&mut self, line: &str, start_time: Instant) -> bool {
++        {
+             let args: Vec<_> = line.split_ascii_whitespace().collect();
+             if args.is_empty() {
+-                line.clear();
+-                continue;
++                return true;
+             }
+ 
+             let (&command, args) = args.split_first().unwrap();
+@@ -169,12 +178,11 @@ impl TeiHandler {
+                 "bench" => self.handle_bench(args.first().copied()),
+                 #[cfg(feature = "tune")]
+                 "obspsa" => self.ob_spsa(),
+-                "quit" => break,
++                "quit" => return false,
+                 unknown => eprintln!("Warning: Unknown command '{}'", unknown),
+             }
+-
+-            line.clear();
+         }
++        true
+     }
+ 
+     fn handle_tei(&self) {
+@@ -846,3 +854,43 @@ pub fn run() {
+ 
+     handler.run();
+ }
++
++// WASI (tinue's in-browser build): the host writes TEI lines into a buffer from tk_alloc and calls tk_command; output
++// goes to stdout (fd 1), which the host captures. A "go" runs to completion before tk_command returns.
++#[cfg(target_os = "wasi")]
++mod wasi {
++    use super::TeiHandler;
++    use std::cell::RefCell;
++
++    thread_local! {
++        static HANDLER: RefCell<Option<TeiHandler>> = const { RefCell::new(None) };
++    }
++
++    #[unsafe(no_mangle)]
++    pub extern "C" fn tk_alloc(len: usize) -> *mut u8 {
++        let mut buf = Vec::<u8>::with_capacity(len.max(1));
++        let ptr = buf.as_mut_ptr();
++        std::mem::forget(buf);
++        ptr
++    }
++
++    #[unsafe(no_mangle)]
++    pub extern "C" fn tk_free(ptr: *mut u8, len: usize) {
++        unsafe { drop(Vec::from_raw_parts(ptr, 0, len.max(1))) };
++    }
++
++    /// # Safety
++    /// `ptr` must point to `len` bytes of UTF-8 from tk_alloc.
++    #[unsafe(no_mangle)]
++    pub unsafe extern "C" fn tk_command(ptr: *const u8, len: usize) -> i32 {
++        let line = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len)) };
++        HANDLER.with(|h| {
++            let mut h = h.borrow_mut();
++            let handler = h.get_or_insert_with(TeiHandler::new);
++            let quit = !handler.dispatch(line, std::time::Instant::now());
++            use std::io::Write;
++            let _ = std::io::stdout().flush();
++            quit as i32
++        })
++    }
++}

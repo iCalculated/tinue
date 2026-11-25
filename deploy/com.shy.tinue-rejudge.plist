@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SAMPLE ONLY (plan step S4): nobody installs this automatically; the lead decides whether it goes on crux.
+     Nightly re-judge of the last 7 days' rated misses: PROPOSALS ONLY (scripts/rejudge.mjs opens the database read-only
+     and writes data/rejudge/rejudge-YYYY-MM-DD.{json,txt}). One process, background QoS (taskpolicy -b) and nice 19,
+     a 1 CPU-hour cap measured by the script itself. Rollback: launchctl bootout gui/$(id -u)/com.shy.tinue-rejudge.
+     Install (by hand): cp deploy/com.shy.tinue-rejudge.plist ~/Library/LaunchAgents/ &&
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.shy.tinue-rejudge.plist
+     StartCalendarInterval, not StartInterval (StartInterval agents have been seen never to fire). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.shy.tinue-rejudge</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/sbin/taskpolicy</string><string>-b</string>
+    <string>/usr/bin/nice</string><string>-n</string><string>19</string>
+    <string>/opt/homebrew/bin/node</string><string>--no-warnings</string><string>--max-old-space-size=1024</string>
+    <string>scripts/rejudge.mjs</string><string>--days</string><string>7</string><string>--cpu-hours</string><string>1</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/YOU/Projects/tinue</string>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>30</integer></dict>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+  <key>Nice</key><integer>19</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>/Users/YOU/Library/Logs/tinue-rejudge.log</string>
+  <key>StandardErrorPath</key><string>/Users/YOU/Library/Logs/tinue-rejudge.log</string>
+</dict></plist>
