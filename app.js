@@ -1,29 +1,30 @@
-import { Game } from './shared/tak.js?v=1795630218';
-import { unplayedPlies } from './shared/ptn.js?v=1795630218';
-import { syntaksBoard } from './shared/judge.js?v=1795630218';
-import { THEMES } from './shared/themes.js?v=1795630218';
-import { provisional, PLAYER_START } from './shared/rating.js?v=1795630218';
-import { buildPTN, focusedByPointer, hooks } from './board-kit.js?v=1795630218';
-import { NinjaBoard } from './ninja.js?v=1795630218';
-import * as engine from './engine.js?v=1795630218';
-import { showLineOn, moveSquares } from './lines.js?v=1795630218';
-import * as tiltak from './tiltak.js?v=1795630218';
-import * as syntaks from './syntaks.js?v=1795630218';
-import { API, api, store, token, setToken, guestId, notice, setNotice, onNotice, WAIT_NOTICE } from './api.js?v=1795630218';
-import { createNext } from './next.js?v=1795630218';
-import { BUSY_MS, busy, busyUntil, endLocked, barHide } from './busy.js?v=1795630218';
-import { createOutbox, ownerOf } from './outbox.js?v=1795630218';
-import * as sound from './sound.js?v=1795630218';
-import { confirmOn, soundOn, soundOf, holds, phaseKey, pending, pendingAct, settingsNote, takesHeldKey } from './settings.js?v=1795630218';
-import { defender, ending, legalMove, gameRated, unratedWhy, winRated, lossRated, lossWhy, provenPlayOut, heldDisplaced, quickOutcome, capWait, provenLossLead, deferredResendOk, answerOwnsToken, stalls, heldResend, settledHeld, legalPrefix, pliesLeftOf, slowerWinsAt, playOutOf, applyProofLength, defenderName, upgradeToProven, measureProof, isTak, countTak, outOfMoves, takLeft, TAK_COUNTDOWN, replyEntry, logOk, leftRunsOn, runOnHeld, noEnding, REFUTED, ENGINE_MS } from './playon.js?v=1795630218';
-import { copy } from './playon-copy.js?v=1795630218';
-import { OTHER, syncedOf, decide, diff, changesBody, carried, unsentKeys, withUnsent, afterPost, syncStatus } from './prefsync.js?v=1795630218';
-import { parseLook, encodeLook, cleanLook, lookReport, THEMES as NINJA_THEMES, themeOf, withTheme, themeName, showLook } from './ninja-look.js?v=1795630218';
-import * as defend from './defend.js?v=1795630218';
-import { ninjaUrl, fromSyntaks, fromTiltak, fromChild, quickLine, mergeLines, pickCandidates, pinnedAt, threatGroups, chipLabel, numberedPV, ptnParts } from './analysis.js?v=1795630218';
-import { symFromRecord } from './rush-rules.js?v=1795630218';
-import { freeOffer, freeFrom, freeExit, freeOverText, takeBack, freeDefender, freeFailKey, cardSplice, freeFocus } from './freeplay.js?v=1795630218';
-import { orientPage, puzzleHash, symOf, toServer } from './pagesym.js?v=1795630218';
+import { Game } from './shared/tak.js?v=1795646595';
+import { unplayedPlies } from './shared/ptn.js?v=1795646595';
+import { syntaksBoard } from './shared/judge.js?v=1795646595';
+import { THEMES } from './shared/themes.js?v=1795646595';
+import { provisional, PLAYER_START } from './shared/rating.js?v=1795646595';
+import { buildPTN, focusedByPointer, hooks } from './board-kit.js?v=1795646595';
+import { NinjaBoard } from './ninja.js?v=1795646595';
+import * as engine from './engine.js?v=1795646595';
+import { showLineOn, moveSquares } from './lines.js?v=1795646595';
+import * as tiltak from './tiltak.js?v=1795646595';
+import * as syntaks from './syntaks.js?v=1795646595';
+import { API, api, store, token, setToken, guestId, notice, setNotice, onNotice, onAnswered, WAIT_NOTICE } from './api.js?v=1795646595';
+import { createNext } from './next.js?v=1795646595';
+import { BUSY_MS, busy, busyUntil, endLocked, barHide } from './busy.js?v=1795646595';
+import { createOutbox, ownerOf } from './outbox.js?v=1795646595';
+import { createResults, settles } from './results.js?v=1795646595';
+import * as sound from './sound.js?v=1795646595';
+import { confirmOn, soundOn, soundOf, holds, phaseKey, pending, pendingAct, settingsNote, takesHeldKey } from './settings.js?v=1795646595';
+import { defender, ending, legalMove, gameRated, unratedWhy, winRated, lossRated, lossWhy, provenPlayOut, heldDisplaced, quickOutcome, capWait, provenLossLead, deferredResendOk, answerOwnsToken, stalls, heldResend, settledHeld, legalPrefix, pliesLeftOf, slowerWinsAt, playOutOf, applyProofLength, defenderName, upgradeToProven, measureProof, isTak, countTak, outOfMoves, takLeft, TAK_COUNTDOWN, replyEntry, logOk, leftRunsOn, runOnHeld, noEnding, REFUTED, ENGINE_MS } from './playon.js?v=1795646595';
+import { copy } from './playon-copy.js?v=1795646595';
+import { OTHER, syncedOf, decide, diff, changesBody, carried, unsentKeys, withUnsent, afterPost, syncStatus } from './prefsync.js?v=1795646595';
+import { parseLook, encodeLook, cleanLook, lookReport, THEMES as NINJA_THEMES, themeOf, withTheme, themeName, showLook } from './ninja-look.js?v=1795646595';
+import * as defend from './defend.js?v=1795646595';
+import { ninjaUrl, fromSyntaks, fromTiltak, fromChild, quickLine, mergeLines, pickCandidates, pinnedAt, threatGroups, chipLabel, numberedPV, ptnParts } from './analysis.js?v=1795646595';
+import { symFromRecord } from './rush-rules.js?v=1795646595';
+import { freeOffer, freeFrom, freeExit, freeOverText, takeBack, freeDefender, freeFailKey, cardSplice, freeFocus } from './freeplay.js?v=1795646595';
+import { orientPage, puzzleHash, symOf, toServer } from './pagesym.js?v=1795646595';
 
 const $ = (s) => document.querySelector(s);
 // C2 (docs/plan/PLAN.md): each ply is also posted to /api/move, in shadow, beside /api/result (outbox.js). Only when
@@ -97,7 +98,8 @@ const heldRec = {
     // A settled record of another puzzle (its upload failed, kept for a resend) mustn't be lost by this one replacing it:
     // send it now, as flushHeld would (quiet, not awaited; its page is this one, so it isn't checked for being alive).
     // If its first upload is still on its way, only resend when that one fails (else it would be sent twice).
-    const prev = heldRec.get(), send = heldDisplaced(prev, v.id, owner()), epoch = authEpoch;
+    // (nothing to do when it waits in the results queue: results.js)
+    const prev = heldRec.get(), send = prev && results.has(prev.id, prev.owner) ? null : heldDisplaced(prev, v.id, owner()), epoch = authEpoch;
     if (send) {
       const go = (si = signIn) => api(withBuild('/api/result', send.build), { ...send.body, ...(token ? {} : { guest: guestSeed() }) }, { quiet: true })
         .then((r) => { if (r?.token && answerOwnsToken(si, signIn)) { setToken(r.token); ownHeld(); } }, () => {});
@@ -111,8 +113,9 @@ const heldRec = {
   del(id) { try { if (id == null || heldRec.get()?.id === id) sessionStorage.removeItem('tinue.held'); } catch {} },
 };
 // A token a result just made for this browser (its first result made it a guest): a record held from before it had
-// one is this guest's, so it is stamped as theirs (only the owner: its build stays the one that wrote it).
-const ownHeld = () => { try { const h = heldRec.get(); if (h?.id && h.owner === '') sessionStorage.setItem('tinue.held', JSON.stringify({ ...h, owner: owner() })); } catch {} };
+// one is this guest's, so it is stamped as theirs (only the owner: its build stays the one that wrote it), and so are
+// the results and Rush runs waiting to be sent.
+const ownHeld = () => { results.own(); try { const q = store.get('rushQueue', []); if (token && Array.isArray(q) && q.some((x) => x?.who === null)) store.set('rushQueue', q.map((x) => (x?.who === null ? { ...x, who: owner() } : x))); } catch {} try { const h = heldRec.get(); if (h?.id && h.owner === '') sessionStorage.setItem('tinue.held', JSON.stringify({ ...h, owner: owner() })); } catch {} };
 // Whether the page that wrote a held record is still open (its lock is taken). A lock a reload has just let go of may
 // take a moment to free, so it gets 1.5 s; without Web Locks, as before (sent).
 const pageAlive = (page) => {
@@ -149,6 +152,32 @@ let authEpoch = 0;
 // answer or only as the cookie):
 // a result's answer that left before keeps its own minted token and user to itself (answerOwnsToken).
 let signIn = 0;
+// Results on their way to the server, kept until it has them (results.js). Sent again at load, when the browser comes
+// online, after any answered call, and on a timer. Settled late: the rating, and the card if that puzzle is still shown.
+const results = (() => {
+  let ls = null; try { ls = localStorage; } catch {}
+  let si = 0;
+  const q = createResults({ storage: ls, owner, send: (e) => { si = signIn; return api(withBuild('/api/result', e.b), { ...e.body, ...(token ? {} : { guest: { gid: e.gid || guestSeed().gid } }) }, { quiet: true }); },
+    settled: (e, r) => {
+      const ours = answerOwnsToken(si, signIn), s = S;
+      const h = heldRec.get();
+      if (h?.id === e.puzzleId && h.owner === e.owner) heldRec.del(h.id);
+      if (r.token && ours) { setToken(r.token); ownHeld(); }
+      if (r.user && ours) { me = r.user; renderUser(); }
+      if (notice?.kind === 'net' || notice?.kind === 'wait') { // (it answers again: a first puzzle that failed to load is asked for again)
+        const failed = notice.kind === 'net' && (!S || S.placeholder);
+        setNotice(null); renderAll(); if (failed) route();
+      }
+      if (s?.queued && s.p.id === e.puzzleId) {
+        s.queued = false; s.resend = false; s.notCounted = r.user ? null : 'error';
+        if (r.user) { s.delta = r.rated ? r.userDelta : null; s.serverRated = !!r.rated; s.repeat = !r.rated && !s.casual; if (r.rated) s.p.attempts++; }
+        renderAll();
+      }
+    } });
+  onAnswered(() => q.answered());
+  addEventListener('online', () => q.answered());
+  return q;
+})();
 
 // The board: PTN Ninja's, in an iframe (ninja.js), for everyone (tinue's own, board.js, is retired; a stored Board
 // setting or a ?board= in the address is ignored). A finished move goes through moveIn (Confirm moves). While PTN
@@ -181,7 +210,7 @@ function renderUser() {
   if (me?.name) {
     // Name with a small menu on hover/focus: History, Sign out (with an inline confirm).
     box.innerHTML = `<div class="menu"><button class="link name" aria-haspopup="true">${esc(me.name)}</button>
-      <div class="pop" role="menu"><a href="#/me" role="menuitem">History</a><a href="#/settings" role="menuitem">Settings</a><button class="link" id="logout" role="menuitem">Sign out</button>
+      <div class="pop" role="menu"><a href="#/me" role="menuitem">History</a><a href="#/settings" role="menuitem">Settings</a>${parkedLine('', ' role="menuitem"')}<button class="link" id="logout" role="menuitem">Sign out</button>
         <div class="confirm hidden" id="logout-confirm"><p>You’ll need your login token (on your History page) to sign back in on this device.</p><button class="danger" id="logout-yes">Sign out</button><p class="err hidden" id="logout-err">Couldn’t sign out: the server didn’t answer.</p></div></div></div>`;
     // (a keyboard press moves focus onto the confirm: the button it pressed hides, and the menu lives on focus)
     $('#logout').onclick = (e) => { $('#logout-err').classList.add('hidden'); $('#logout-confirm').classList.remove('hidden'); $('#logout').classList.add('hidden'); if (!e.detail) $('#logout-yes').focus(); };
@@ -194,9 +223,11 @@ function renderUser() {
     menu.addEventListener('mouseleave', fold); menu.addEventListener('focusout', fold);
     $('#logout-yes').onclick = async () => {
       await abandonAll({ auth: true }); restoreLeft();
+      const was = token;
       // (signed out only once the server says so: its cookie would keep naming the player)
       try { const r = await api('/api/logout', {}); if (r?.error) throw new Error(r.error); } catch { $('#logout-err')?.classList.remove('hidden'); return; }
       authEpoch++; signIn++; setToken(null); forgetNext(); me = null; serverSettings = null; syncState = 'saved'; // (this device keeps its settings)
+      if (window.TINUE_OLD) { store.set('out', [...new Set([...store.get('out', []), ...[was, parked()?.token].filter(Boolean).map(ownerOf)])]); store.del('parked'); } // (the old address may still have this player: moved/import.js leaves it there)
       session.length = 0; saveSession(); renderUser(); refreshPage(); };
   } else {
     // One quiet button; claiming a name (or pasting a token) happens in a small popover.
@@ -205,7 +236,7 @@ function renderUser() {
         <form id="claim"><label class="field"><span>Username</span><input name="name" id="claim-name" maxlength="20" autocomplete="username" placeholder="2–20 letters, digits, _ or -"></label>
           <button class="primary" type="submit">Claim</button><p class="err hidden" id="claim-err"></p>
           <p class="hint">No password: your browser remembers you. <button type="button" class="link" id="token-open">Have a login token?</button></p>
-          <p class="hint"><a href="#/settings" class="link" id="settings-open">Settings</a></p></form>
+          <p class="hint"><a href="#/settings" class="link" id="settings-open">Settings</a></p>${bringLine()}${parked() ? `<p class="hint">${parkedLine()}</p>` : ''}</form>
         <form id="tok" class="hidden"><label class="field"><span>Login token</span><input name="token" id="tok-in" autocomplete="off" placeholder="From the History page on your other device"></label>
           <button class="primary" type="submit">Sign in</button><p class="err hidden" id="tok-err"></p></form>
       </div></div>`;
@@ -229,7 +260,7 @@ function renderUser() {
       if (r.error) return showErr('#claim-err', r.error);
       if (r.token && token && r.token !== token) authEpoch++; // another account now (a guest naming its own row isn't)
       signIn++; // signed in as the named account now (its token may come only as a cookie): an answer on its way stays out
-      if (r.token) setToken(r.token);
+      if (r.token) { const first = !token; setToken(r.token); if (first) ownHeld(); }
       me = r.user; renderUser(); settingsArrived(r); refreshPage();
     };
     $('#tok').onsubmit = async (e) => {
@@ -255,6 +286,40 @@ document.addEventListener('click', (e) => { // close the claim popover when clic
   const m = document.querySelector('.menu.click.open');
   if (m && !m.contains(e.target)) closeMenu(m, false);
 });
+// A build for its own domain (config.js TINUE_OLD, the old address): players brought from there (moved/import.js). Two
+// players in one browser are never merged and neither is lost: the one not in use is parked, and the menu switches back.
+const parked = () => { const p = window.TINUE_OLD ? store.get('parked', null) : null; return p && typeof p.token === 'string' && p.token !== token ? p : null; };
+// The current player parked, and the page loaded again as p ({ token, gid, name }, or all the old page sent).
+async function switchTo(p) {
+  await abandonAll({ auth: true });
+  const now = { token, gid: store.get('gid', null), name: me?.name ?? null };
+  if (now.token && now.token !== p.token) store.set('parked', now); else store.del('parked');
+  window.tinueInstall(p); location.reload();
+}
+const bringLine = () => window.TINUE_OLD && !me?.name && !store.get('out', []).includes(store.get('brought', null)?.o) ? '<p class="hint">Played on shydrie.xyz? <button type="button" class="link" data-bring>Bring your account</button></p>' : '';
+const parkedLine = (cls = '', role = '') => { const p = parked(); return p ? `<button type="button" class="link ${cls}"${role} data-unpark>Switch to ${esc(p.name || 'your other guest')}</button>` : ''; };
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('[data-bring]')) window.tinueBring?.();
+  else if (e.target.closest?.('[data-unpark]')) { const p = parked(); if (p) switchTo(p); }
+});
+// Both origins had a player: the one here stays until this is answered.
+async function askTwo() {
+  let p = null; try { p = JSON.parse(sessionStorage.getItem('tinue.hp')); } catch {}
+  const done = () => { try { sessionStorage.removeItem('tinue.hp'); } catch {} if (p?.token) window.tinueBrought?.(p.token); };
+  if (!p || !window.TINUE_OLD || !token || p.token === token) return done();
+  const r = await fetch(API + '/api/me', { headers: { authorization: 'Bearer ' + p.token }, credentials: 'omit' }).then((x) => x.json()).catch(() => null);
+  if (!r) return; // (asked again at the next load)
+  if (!r.user) return done();
+  const label = (u) => u?.name || (u ? `a guest rated ${Math.round(u.rating)}` : 'a guest');
+  const bar = Object.assign(document.createElement('div'), { id: 'two-bar', className: 'build-bar' });
+  bar.setAttribute('role', 'status'); bar.style.flexWrap = 'wrap';
+  const msg = Object.assign(document.createElement('span'), { className: 'msg', textContent: `You have two players: ${label(me)} here, ${label(r.user)} from shydrie.xyz.` });
+  const b = (text, fn) => Object.assign(document.createElement('button'), { type: 'button', textContent: text, onclick: fn });
+  bar.append(msg, b(`Use ${label(r.user)}`, () => { done(); switchTo({ ...p, me: r.user.name ? { name: r.user.name } : null }); }),
+    b(`Keep ${label(me)}`, () => { done(); store.set('parked', { token: p.token, gid: p.gid ?? null, name: r.user.name ?? null }); bar.remove(); renderUser(); fitDock(); }));
+  $('#build-bar')?.before(bar);
+  fitDock();
+}
 // Focus gone into PTN Ninja's frame (a click on its board): no click or key from there reaches the page, so what a click
 // elsewhere or Escape would end here ends now. The claim popover closes, and a move waiting for Confirm keeps the
 // keyboard (Esc cancels, Enter confirms; PTN Ninja's board is off meanwhile). Otherwise Escape stays PTN Ninja's own.
@@ -279,7 +344,7 @@ const nextQuery = (skip) => { // skip: a puzzle id to leave out (one whose resul
   const q = new URLSearchParams({ difficulty: prefs.difficulty });
   if (prefs.size) q.set('size', prefs.size);
   if (prefs.theme) q.set('theme', prefs.theme);
-  const ex = [...(token ? [] : legacySeen.slice(-200)), ...(skip ? [skip] : [])];
+  const ex = [...(token ? [] : legacySeen.slice(-200)), ...(skip ? [skip] : []), ...results.ids()]; // (results still to be sent: the server doesn't know those were played)
   if (!token) q.set('rating', Math.round(myRating().rating));
   if (ex.length) q.set('exclude', ex.join(','));
   return q.toString();
@@ -337,7 +402,7 @@ if (BUILD) {
 // solution shown). Before the first move it stays if it was up as the puzzle started (fresh: start()), but doesn't
 // newly appear: the check answers after the board is playable, maybe as the player taps (busy.js barHide).
 // renderAll calls this too.
-const BAR_TEXT = 'tinue was updated. Reload to get the fixes. Your rating and puzzle queue are kept.';
+const BAR_TEXT = 'tinue was updated. Reload to get the fixes. Your rating is kept.';
 function renderBuildBar(fresh = false) {
   const bar = $('#build-bar'), live = $('#build-live');
   if (!bar) return; // an older index.html
@@ -345,7 +410,7 @@ function renderBuildBar(fresh = false) {
   if (bar.hidden === hide) return;
   bar.hidden = hide;
   if (!hide && !bar.firstChild) {
-    bar.innerHTML = '<span class="msg">tinue was updated. <span class="muted">Reload to get the fixes. Your rating and puzzle queue are kept.</span></span>'
+    bar.innerHTML = '<span class="msg">tinue was updated. <span class="muted">Reload to get the fixes. Your rating is kept.</span></span>'
       + '<button type="button" class="primary reload">Reload</button><button type="button" class="x" aria-label="Dismiss" title="Dismiss">×</button>';
     bar.querySelector('.reload').addEventListener('click', reloadNow);
     bar.querySelector('.x').addEventListener('click', () => { buildBarHidden = true; renderBuildBar(); }); // until the next puzzle
@@ -470,7 +535,7 @@ const fromEngine = (s, r) => s.x.answer(r);
 let lz = null, lzLoad = null;
 const ninjaHref = () => lz && ninjaUrl({ ptn: ptnFor(shownLine()), ply: S.view ?? shownLine().length, name: 'tinue #' + S.p.id }, lz);
 function loadLz() {
-  lzLoad ||= import('./vendor/lz-string.js?v=1795630218').then((m) => { lz = m.compressToEncodedURIComponent; refreshNinja(); }, () => { lzLoad = null; });
+  lzLoad ||= import('./vendor/lz-string.js?v=1795646595').then((m) => { lz = m.compressToEncodedURIComponent; refreshNinja(); }, () => { lzLoad = null; });
 }
 function refreshNinja() {
   if (!S || S.placeholder || S.status !== 'solved') return;
@@ -1018,22 +1083,26 @@ async function report(win, s = S, flags = s, { keepalive = false, ms } = {}) {
   // (the log's moves in the puzzle's own orientation: pagesym.js toServer)
   const p = s.p, timing = { ms: (s.decidedMs ?? elapsed(s)) ?? undefined, log: s.log.length ? s.x.log(s.log) : undefined };
   let answered = false;
+  // Queued before it is posted (results.js). An earlier result for this puzzle still unsent stands, as it would at the server.
+  const entry = results.add({ puzzleId: p.id, body: { puzzleId: p.id, win, ...(s.casual ? { casual: true } : { theme: s.theme || undefined }), ...timing }, b: BUILD, owner: owner(), gid: token ? null : guestId() });
   // Sent as the page goes away: this request carries the result, so the held copy isn't flushed again (unrated) on the
   // next load; otherwise which of the two reached the server first would decide (a play-on left by reloading is rated).
   if (keepalive) heldRec.del(p.id);
   // A held result settled now: if the page reloads before the server has it, flushHeld sends this result (under this
   // build), not an unrated miss (the server keeps only the first, so a resend of one that landed changes nothing).
   else if (heldRec.get()?.id === p.id) heldRec.set(settledHeld(p.id, timing, win, s.casual, s.theme));
-  try { // a failed upload (network, server restart) loses this result (a held one waits for a reload), not the session
+  try { // a failed upload (network, server restart): the result waits in the queue (a held one for a reload, where storage is unavailable)
     // noWait: a slow upload mustn't swap the card (and its Hint button) for the waiting notice; a failed one still says so
     const si = signIn; // (a sign-in while this is on its way keeps its token: answerOwnsToken)
-    const req = api(withBuild('/api/result'), { puzzleId: p.id, win, ...(s.casual ? { casual: true } : { theme: s.theme || undefined }), ...timing,
+    results.start(entry);
+    const req = api(withBuild('/api/result', entry?.b ?? BUILD), { ...(entry?.body ?? { puzzleId: p.id, win, ...(s.casual ? { casual: true } : { theme: s.theme || undefined }), ...timing }),
       ...(token ? {} : { guest: guestSeed() }) }, { noWait: true, keepalive }); // the first result makes a first-time visitor a guest
     reporting.add(req); req.catch(() => {}).finally(() => reporting.delete(req)); // (a reload for a newer build waits for it)
     uploading.set(p.id, req); req.catch(() => {}).finally(() => { if (uploading.get(p.id) === req) uploading.delete(p.id); });
     const r = await req;
     if (uploading.get(p.id) === req) uploading.delete(p.id); // answered: done now, not a tick later in its finally(), so the card below is drawn once
     const ours = answerOwnsToken(si, signIn);
+    if (entry && settles(r)) results.drop(entry);
     if (r.token && ours) { setToken(r.token); ownHeld(); }
     // Refused: 429 (too many results, or too many new guests from one address) or any other error; nothing was rated.
     if (!r.user && r.error) s.notCounted = /^too many/i.test(r.error) ? 'rate' : 'error';
@@ -1048,6 +1117,9 @@ async function report(win, s = S, flags = s, { keepalive = false, ms } = {}) {
       if (ours) { me = r.user; renderUser(); } // (else it's the guest this result went in under, not who's signed in now)
     }
   } catch { s.delta = null; s.notCounted = 'lost'; }
+  results.stop(entry);
+  s.queued = !answered && !!entry && results.has(entry.puzzleId, entry.owner); // (sent when the server is back)
+  if (s.queued) results.failed(s.notCounted === 'lost');
   // Not recorded, but the held copy is still there: a reload of this tab sends it (flushHeld). The cards say which.
   s.resend = !answered && !keepalive && heldRec.get()?.id === p.id;
   session.push({ id: p.id, win, delta: s.delta }); saveSession();
@@ -1135,9 +1207,11 @@ addEventListener('pagehide', () => { abandonAll({ keepalive: true }); shadow((o)
 // is served: what it goes as, or whether it's dropped, is playon.js heldResend. Unreachable: kept for the next load.
 async function flushHeld() {
   const h = heldRec.get();
-  if (!h?.id) return null;
+  if (!h?.id) return results.flush();
   const send = heldResend(h, owner(), await pageAlive(h.page));
-  if (!send) return heldRec.del(h.id);
+  if (!send) { heldRec.del(h.id); return results.flush(); }
+  // Into the results queue (a result of this puzzle already there stands), or posted from here where storage is unavailable.
+  if (results.add({ puzzleId: h.id, body: send.body, b: send.build, owner: h.owner, gid: token ? null : guestId() })) { heldRec.del(h.id); return results.flush(); }
   try {
     // (registered like report()'s, so a record that is still being flushed when the first puzzle displaces it waits)
     const si = signIn;
@@ -1145,7 +1219,7 @@ async function flushHeld() {
     uploading.set(h.id, req); req.catch(() => {}).finally(() => { if (uploading.get(h.id) === req) uploading.delete(h.id); });
     const r = await req;
     if (r?.token && answerOwnsToken(si, signIn)) setToken(r.token);
-    heldRec.del(h.id);
+    if (settles(r)) heldRec.del(h.id);
   } catch {}
 }
 
@@ -1926,6 +2000,7 @@ function renderAll(mood) {
 const notCountedText = () => {
   const n = S.notCounted;
   if (!n) return '';
+  if (S.queued) return n === 'rate' ? 'Not sent yet: too many results too quickly. It will be sent in a bit.' : 'Not sent yet; it will be sent when the server is back.';
   if (S.resend && n === 'lost') return 'Your result isn’t saved yet: the server didn’t answer. Reload the page to send it again.';
   return n === 'rate' ? 'Not rated: too many results too quickly; try again in a bit.'
     : n === 'lost' ? 'Your result couldn’t be saved: the server didn’t answer.' : 'Not rated: the server didn’t record this result.';
@@ -2715,7 +2790,7 @@ async function mePage() {
   show('view-me');
   const el = $('#view-me');
   const claim = 'Claim a username (top right) to join the leaderboard and sign in on other devices.';
-  if (!me) { el.innerHTML = `<h1>History</h1><div class="panel"><p class="flush">Your puzzles will show up here. ${claim}</p></div>`; return; }
+  if (!me) { el.innerHTML = `<h1>History</h1><div class="panel"><p class="flush">Your puzzles will show up here. ${claim}</p>${bringLine()}</div>`; return; }
   // (me fresh too: another tab may have played since this one loaded, and the chart ends at me.rating)
   const [got, fresh] = await Promise.all([api('/api/history').catch(() => null), api(withBuild('/api/me')).catch(() => null)]);
   if (fresh?.user) { me = fresh.user; renderUser(); settingsArrived(fresh); }
@@ -2786,9 +2861,9 @@ async function route() {
   if (page === 'me') return mePage();
   if (page === 'leaderboard') return leaderPage();
   if (page === 'settings') return settingsPage();
-  if (page === 'rush') { show('view-rush'); return (rushPage ||= await import('./rush.js?v=1795630218')).enter({ frame: board }); } // loaded on first visit; PTN Ninja's frame, which Rush borrows
+  if (page === 'rush') { show('view-rush'); return (rushPage ||= await import('./rush.js?v=1795646595')).enter({ frame: board }); } // loaded on first visit; PTN Ninja's frame, which Rush borrows
   // The sound lab (sound-lab.js): beta builds only; elsewhere #/sounds is no page at all (it falls through to puzzles)
-  if (page === 'sounds' && window.TINUE_BETA && $('#view-sounds')) { show('view-sounds'); return (labPage ||= await import('./sound-lab.js?v=1795630218')).enter($('#view-sounds')); }
+  if (page === 'sounds' && window.TINUE_BETA && $('#view-sounds')) { show('view-sounds'); return (labPage ||= await import('./sound-lab.js?v=1795646595')).enter($('#view-sounds')); }
   show('view-puzzle');
   renderFilters().catch(() => {}); // the puzzle doesn't wait for the theme counts
   // Keeping the puzzle on screen: a Next this navigation superseded may have left it mid-way (needsRestore, busy) after
@@ -2817,6 +2892,7 @@ async function route() {
 window.addEventListener('hashchange', route);
 
 (async () => {
+  if (await window.TINUE_WAIT) return; // (tinue.me: the player is being brought from the old address, moved/import.js)
   const cached = store.get('me', null);
   nextQ.resume(); // the puzzle picked after the last result here, if still fresh: the first puzzle needs no request
   if (cached && token) { me = { ...cached, rating: store.get('myRating', PLAYER_START.rating), provisional: store.get('myProv', true), games: 0, wins: 0 }; }
@@ -2825,7 +2901,7 @@ window.addEventListener('hashchange', route);
   renderAll(); // placeholder panels at their final size
   board.load(buildPTN({ size: +(prefs.size || 6) })); // the same board component, empty, until the puzzle arrives
   requestAnimationFrame(() => document.documentElement.classList.remove('booting')); // reveal once laid out
-  const meP = api(withBuild('/api/me')).then((r) => { me = r.user; renderUser(); settingsArrived(r); if (S) renderAll(); }).catch(() => { if (syncState === 'saving') { syncState = 'unsent'; renderSyncStatus(); } });
+  const meP = api(withBuild('/api/me')).then((r) => { me = r.user; renderUser(); settingsArrived(r); if (S) renderAll(); askTwo(); }).catch(() => { if (syncState === 'saving') { syncState = 'unsent'; renderSyncStatus(); } });
   // With a cached account the puzzle request goes out alongside /api/me (the server knows us by the token).
   const flushed = flushHeld(); // before the first puzzle, so the server knows that one was played
   if (flushed) await Promise.race([flushed, new Promise((r) => setTimeout(r, 3000))]);

@@ -35,6 +35,14 @@ export function createNext({ get, store, now = Date.now, filterKey, playerKey, q
     if (puzzles.length !== queue.puzzles.length) { queue.puzzles = puzzles; store.set('queue', queue); }
   }
 
+  // (one exclude: the filters' query may bring its own, and the server reads only the last of two)
+  function queryWith(ids, n) {
+    const q = new URLSearchParams(query()), ex = [...new Set([...(q.get('exclude') || '').split(',').filter(Boolean), ...ids])];
+    q.set('n', n);
+    if (ex.length) q.set('exclude', ex.join(','));
+    return q.toString();
+  }
+
   // Fetch a batch: appended to what's queued, or in its place once the rating has drifted (or the queue is stale).
   // Only for a settled player: a request still finishing for someone who has since signed out mustn't start one.
   function fillQueue(taken) {
@@ -43,7 +51,7 @@ export function createNext({ get, store, now = Date.now, filterKey, playerKey, q
     const key = filterKey(), who = playerKey();
     const keep = queueOk() && !drifted() ? queue.puzzles : [];
     const exclude = [...keep.map((p) => p.id), currentId(), taken, store.get('next', null)?.puzzle?.id].filter(Boolean);
-    const req = filling = get(`/api/next?${query()}&n=${BATCH}${exclude.length ? '&exclude=' + exclude.join(',') : ''}`)
+    const req = filling = get('/api/next?' + queryWith(exclude, BATCH))
       .then((r) => {
         if (!r?.puzzles || key !== filterKey() || who !== playerKey()) return;
         queue = { key, who, rating: r.rating, at: now(), puzzles: [...(queueOk() && !drifted() ? queue.puzzles : []), ...r.puzzles] };
