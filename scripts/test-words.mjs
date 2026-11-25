@@ -104,7 +104,9 @@ test('every theme a player sees has one short definition, and claims nothing its
   }
   assert.doesNotMatch(THEMES.fork.desc, /only block one|road threats/); assert.doesNotMatch(THEMES.reveal.desc, /completes/); assert.doesNotMatch(THEMES.smash.desc, /path|opening/);
   assert.doesNotMatch(THEMES.capture.desc, /taking/); assert.match(THEMES.gaelet.desc, /komi/); assert.match(THEMES.gaelet.desc, /gaelet/);
-  assert.match(THEMES.spread.desc, /^A regular spread/); assert.match(THEMES.throw.desc, /^An irregular spread/);
+  assert.match(THEMES.spread.desc, /^You .*\(a regular spread\)/); assert.match(THEMES.throw.desc, /^You .*\(an irregular spread\)/);
+  assert.match(THEMES.deep.desc, /first move/); // (later moves weren't searched: scripts/deep-proven.jsonl)
+  assert.doesNotMatch(THEMES.capture.desc, /holds/); // (the top piece decides)
 });
 
 test('no Glossary page: its old links land on the puzzle page, at its address', () => {
@@ -114,6 +116,17 @@ test('no Glossary page: its old links land on the puzzle page, at its address', 
   assert.match(app, /\(puzzle\\\/\[\^\/\]\+\|glossary\|me\|leaderboard\)/); // (…/glossary is still the app's directory)
   assert.doesNotMatch(app, /#\/glossary/);
 });
+
+test('the Theme menu’s line: the definition and what it does to the rating; nothing for Mix or a theme without one', () => {
+  const src = app.match(/themeDesc = .*;\n/)[0], el = { textContent: 'x' };
+  const ctx = vm.createContext({ THEMES, prefs: {}, $: () => el });
+  const line = (theme) => { ctx.prefs.theme = theme; vm.runInContext(src + 'themeDesc()', ctx); return el.textContent; };
+  for (const t of ['', 's6', 'gone']) assert.equal(line(t), '', t);
+  assert.equal(line('fork'), THEMES.fork.desc + ' The theme is a hint, so wins barely raise your rating.');
+  assert.equal(line('deep'), THEMES.deep.desc + ' These count in full for your rating.');
+});
+
+test('a finished puzzle’s "Played" counts rated plays only, and says so when there are none', () => assert.match(app, /: 'No rated plays yet'\}<\/dd>/));
 
 // showTag, with a stand-in for the panel
 test('a finished puzzle\'s tag: its definition and Practice link, one open at a time', () => {

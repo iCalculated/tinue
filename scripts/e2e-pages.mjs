@@ -1,4 +1,4 @@
-// History, Leaderboard, Settings, Rush's start page and a finished puzzle's themes, in headless Chrome at 1280 and 390 px
+// History, Leaderboard, Settings, Rush's start page and a finished puzzle's themes, in headless Chrome at 1280, 390 and 320 px
 // with a made-up API: nothing played, a guest, 3 rows, 200 and 500 rows, long names, provisional, the server not answering.
 // A theme tag opens its definition in place (one at a time, nothing above it moves), the login token stays hidden until
 // asked for, the chart answers a pointer, no page scrolls sideways, and #/glossary lands on the puzzle.
@@ -105,7 +105,8 @@ const shot = async (name, full = false) => {
   const r = await cdp('Page.captureScreenshot', { format: 'png', ...(full ? { captureBeyondViewport: true } : {}) });
   fs.writeFileSync(path.join(SHOTS, `${name}-${label}.png`), Buffer.from(r.result.data, 'base64'));
 };
-const fits = async (what) => ONLY || assert.ok(await ev(`document.documentElement.scrollWidth <= innerWidth`), `${what} scrolls sideways at ${label}: ${await ev('document.documentElement.scrollWidth')}`);
+// (the width set, not innerWidth: a phone’s grows with what overflows it)
+const fits = async (what) => ONLY || assert.ok(await ev(`document.documentElement.scrollWidth`) <= +label, `${what} scrolls sideways at ${label}: ${await ev('document.documentElement.scrollWidth')}`);
 const check = async (what, fn) => { if (ONLY) return; await fn(); console.log('ok', label, what); };
 const clickXY = async (sel) => { const [x, y] = await ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'nearest' }); const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
   for (const type of ['mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 }); };
@@ -113,7 +114,7 @@ const key = async (k, code = k, extra = {}) => { for (const type of ['keyDown', 
 
 const H3 = rows(3), H200 = rows(200), H500 = rows(500);
 try {
-  for (const [w, h, mob] of [[1280, 800, false], [390, 844, true]]) {
+  for (const [w, h, mob] of [[1280, 800, false], [390, 844, true], [320, 568, true]]) {
     await size(w, h, mob);
     // ---- History ----
     for (const [name, world] of Object.entries({
@@ -136,6 +137,7 @@ try {
         assert.equal(await ev(`!!document.querySelector('#token-copy')`), false);
         assert.match(await ev(`document.querySelector('#view-me').innerText`), /Claim a username/);
       });
+      if (name === 'history-3' || name === 'history-200') await check(name + ': "?" explained when the rating has one', async () => assert.equal(await ev(`/\\? means provisional/.test(document.querySelector('#view-me').innerText)`), name === 'history-3'));
       if (name === 'history-200') {
         await check('the chart names the rating, its change and the day under the pointer, inside the panel, and forgets it on leaving', async () => {
           for (const f of [0.02, 0.5, 0.98]) {
@@ -196,7 +198,7 @@ try {
       });
       await shot('puzzle-themes-open');
       await clickXY('#info .tag[data-tag="spread"]'); await sleep(120);
-      await check('one open at a time', async () => { assert.equal(await ev(`document.querySelectorAll('.tag[aria-expanded="true"]').length`), 1); assert.match(await ev(`document.querySelector('#tag-def').innerText`), /regular spread/); });
+      await check('one open at a time', async () => { assert.equal(await ev(`document.querySelectorAll('.tag[aria-expanded="true"]').length`), 1); assert.match(await ev(`document.querySelector('#tag-def').innerText`), /a regular spread/); });
       await check('it stays open, with the keyboard where it was, when the page redraws', async () => {
         await ev(`(document.querySelector('.tag[data-tag="spread"]').focus(), dispatchEvent(new Event('resize')), 1)`);
         await key('ArrowLeft'); await sleep(700);
@@ -213,6 +215,7 @@ try {
       await check('Practice sets the theme, whose definition is under the menu', async () => {
         await clickXY('#info .tag[data-tag="capture"]'); await sleep(100); await clickXY('#tag-def .practice');
         await until(`document.querySelector('#theme').value === 'capture' && document.querySelector('#theme-desc').textContent.startsWith('Your first move')`, 'the theme chosen');
+        await until(`(() => { const b = document.querySelector('#board').getBoundingClientRect(); return b.top >= 0 && b.top < innerHeight / 2; })()`, 'the new puzzle’s board in the window', 5e3);
         await ev(`(scrollTo(0, 0), document.querySelector('#theme').scrollIntoView({ block: 'center' }), 1)`); await shot('puzzle-theme-chosen');
       });
       await check('#/glossary, #/glossary/fork and /glossary land on the puzzle', async () => {

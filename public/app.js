@@ -2114,7 +2114,7 @@ function renderInfo(done) {
     const html = `<dl>
         <dt>Puzzle</dt><dd><a href="#/puzzle/${esc(p.id)}${p.sym ? '/' + p.sym : ''}">#${esc(p.id)}</a>, ${p.size}×${p.size}${p.komi ? ` with komi ${p.komi}` : ''}${canShare() ? ' · <button class="link" id="share-link">Share</button>' : ''}${ANALYSIS ? ' · <a data-ninja target="_blank" rel="noopener" title="Open this line in PTN Ninja">PTN Ninja ↗</a>' : ''}</dd>
         <dt>Rating</dt><dd>${Math.round(p.rating)}</dd>
-        <dt>Played</dt><dd>${p.attempts ? `${p.attempts} time${p.attempts === 1 ? '' : 's'}` : 'Not yet'}</dd>
+        <dt>Played</dt><dd>${p.attempts ? `${p.attempts} time${p.attempts === 1 ? '' : 's'}` : 'No rated plays yet'}</dd>
         <dt>From</dt><dd>${from}</dd>
       </dl>${off ? `
       <div class="sub">${off === 1 ? 'The last move before the puzzle was' : `The last ${off} moves before the puzzle were`} not played in the game.</div>` : ''}
@@ -2357,7 +2357,7 @@ $('#feedback').addEventListener('click', async (e) => {
     if (kb) $('#ptn-in')?.focus();
   }
 });
-const themeDesc = () => { $('#theme-desc').textContent = prefs.theme && THEMES[prefs.theme] ? THEMES[prefs.theme].desc + (THEMES[prefs.theme].fullWeight ? ' These count in full for your rating.' : ' The theme is a hint, so wins barely raise your rating.') : ''; };
+const themeDesc = () => { $('#theme-desc').textContent = THEMES[prefs.theme]?.desc ? THEMES[prefs.theme].desc + (THEMES[prefs.theme].fullWeight ? ' These count in full for your rating.' : ' The theme is a hint, so wins barely raise your rating.') : ''; };
 $('#difficulty').value = prefs.difficulty;
 // A filter changed with the mouse lets go of focus, or number keys meant for the board would go to it (on Board size,
 // 4–8 even pick a size). Changed from the keyboard, it keeps focus.
@@ -2540,7 +2540,7 @@ function renderLookField(fresh = false) {
   th.querySelector('[value="custom"]').hidden = cur !== 'custom'; // (shown only while a pasted theme is in use)
   th.value = cur;
   $('#st-ninja-clear').disabled = !prefs.ninja;
-  $('#st-ninja-d').textContent = 'A theme’s code from PTN Ninja’s theme editor, or a ptn.ninja link’s settings.';
+  $('#st-ninja-d').textContent = 'A theme’s code from PTN Ninja’s theme editor, or a ptn.ninja link’s settings: axis labels, counts, layout, 3D.';
   if (document.activeElement !== inp) inp.value = showLook(prefs.ninja || '');
   if (fresh) $('#st-ninja-msg').textContent = prefs.ninja ? lookReport(parseLook(prefs.ninja)) : '';
 }
@@ -2632,7 +2632,7 @@ async function renderFilters() {
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-theme]');
   // Practice a theme: route() then loads a puzzle with it (the puzzle in progress stays only if it has the theme).
-  if (a) { e.preventDefault(); prefs.theme = a.dataset.theme; store.set('prefs', prefs); go('#/'); }
+  if (a) { e.preventDefault(); prefs.theme = a.dataset.theme; store.set('prefs', prefs); scrollTo(0, 0); go('#/'); } // (the tags are below the board)
 });
 
 // ---------- pages ----------
@@ -2733,6 +2733,7 @@ async function mePage() {
   };
   el.innerHTML = `<h1>History</h1>${me.name ? '' : `<div class="panel guest-note"><p class="flush">You’re a guest, remembered by this browser. ${claim}</p></div>`}
     <p class="hist-sum"><b class="your-rating">${fmtRating(me.rating, me.provisional)}</b> <span class="muted">${me.games} rated puzzle${me.games === 1 ? '' : 's'}, ${me.wins} solved first try</span></p>
+    ${me.provisional ? '<p class="set-status">? means provisional: it settles after about 15 rated puzzles.</p>' : ''}
     ${pts.length ? ratingChart(pts) : ''}
     ${tok ? `<div class="token"><span class="muted">Login token, to sign in on another device</span><button type="button" id="token-show" aria-expanded="false" aria-controls="token-out">Show</button><button type="button" id="token-copy">Copy</button><input id="token-out" class="hidden" readonly aria-label="Login token"></div>` : ''}
     ${h.length ? `<table class="t hist"><thead><tr><th><span class="sr-only">Result</span></th><th>Puzzle</th><th class="num">Rating</th><th class="num">Change</th><th class="num">Time</th></tr></thead>
@@ -2758,7 +2759,7 @@ async function leaderPage() {
   if (!Array.isArray(leaders)) return pageError($('#view-leaderboard'), 'Leaderboard');
   const mine = (l) => !!me?.name && l.name === me.name;
   $('#view-leaderboard').innerHTML = `<h1>Leaderboard</h1>` + (leaders.length
-    ? `${leaders.some((l) => l.provisional) ? '<p class="set-status">A “?” rating is provisional: it settles after about 15 rated puzzles.</p>' : ''}<table class="t lead"><thead><tr><th class="num">#</th><th>Player</th><th class="num">Rating</th><th class="num">Puzzles</th></tr></thead><tbody>${leaders.map((l, i) =>
+    ? `${leaders.some((l) => l.provisional) ? '<p class="set-status">? means provisional: it settles after about 15 rated puzzles.</p>' : ''}<table class="t lead"><thead><tr><th class="num">#</th><th>Player</th><th class="num">Rating</th><th class="num">Puzzles</th></tr></thead><tbody>${leaders.map((l, i) =>
       `<tr${mine(l) ? ' class="you"' : ''}><td class="num muted">${i + 1}</td><td class="who">${esc(l.name)}${mine(l) ? ' <em>you</em>' : ''}</td><td class="num">${fmtRating(l.rating, l.provisional)}</td><td class="num">${l.games}</td></tr>`).join('')}</tbody></table>`
     : `<div class="panel"><p class="flush">Nobody yet. Claim a username and play a rated puzzle.</p></div>`);
 }

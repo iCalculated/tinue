@@ -145,6 +145,11 @@ button.tag:hover, button.tag[aria-expanded="true"] { border-color: var(--accent)
 .tag-def { margin: 8px 0 0; color: var(--fg); }
 .tag-def .practice { font-size: var(--fs-xs); white-space: nowrap; }
 .tag-def .gap { word-spacing: 8px; } /* (the space before Practice: dropped at a line break, as a margin isn't) */
+@media (max-width: 360px) {
+  .page table.t.hist td, .page table.t.hist th { padding-left: 4px; padding-right: 4px; }
+  .page table.t.hist td.num { font-size: var(--fs-xs); }
+  .page table.t.hist td.res { width: 22px; }
+}
 @media (pointer: coarse) { button.tag { padding: 7px 12px; border-radius: 17px; } }
 .delta.up { color: var(--good); }
 .delta.down { color: var(--bad); }
@@ -306,7 +311,7 @@ table.t th.num, table.t td.num { text-align: right; font-variant-numeric: tabula
 table.t.hist tr.day th { background: var(--bg3); color: var(--fg); padding: 5px 12px; }
 .page-note { margin: 8px 0; font-size: var(--fs-xs); }
 .hist-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin: 0 0 12px; }
-.hist-sum .your-rating { font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hist-sum .your-rating { font-size: 24px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .page .guest-note { margin-bottom: 16px; }
 /* the rating chart: round ratings at the left, the days its ends (and middle) fall on below */
 .chart { background: var(--bg2); border-radius: var(--r-panel); padding: 12px 14px 8px 12px; margin-bottom: 12px; }
@@ -326,7 +331,7 @@ table.t.hist tr.day th { background: var(--bg3); color: var(--fg); padding: 5px 
 .credits a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
 .credits a:hover { color: var(--fg-hi); text-decoration-color: currentColor; }
 .token { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; font-size: var(--fs-sm); }
-.token span { flex: 1 1 12em; }
+.token span { flex: 1 1 9em; min-width: 0; }
 .token input { flex: 1 1 100%; min-width: 0; font-family: var(--mono); color: var(--fg); }
 
 @media (max-width: 860px) {
