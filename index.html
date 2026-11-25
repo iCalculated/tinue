@@ -2,16 +2,123 @@
 <html lang="en" class="booting">
 <head>
 <meta charset="utf-8">
+<script>
+// Inlined first in index.html's head when the page is built for its own domain (scripts/build-static.sh, DOMAIN set).
+// The other half is handoff.html, on the old address. Rounds (every hop a location.replace):
+//   old page  -> here #hs=1&o=<its player>[&u=1]&to=<route>   u: it has results the server never got
+//     (if that player has been brought (tinue.brought, kept here: only this side knows it arrived) and nothing is unsent: done)
+//   here      -> old page #hn=<public key>[&m=1][&t=1]&to=<route>   m: only what was never sent; t: a hash of the browser id here; a one-use key pair made in this tab, its private half kept here
+//   old page  -> here #hd=<the payload encrypted for that key>&to=<route>
+// Encrypted because a browser keeps every address in its history (and may sync it), replaced or not, and the payload
+// holds the player's token. The key is also the nonce: only the old page was told it, it is used once, within two
+// minutes, so a link made by someone else can neither sign a visitor in nor replace a player. The payload is off the
+// address before anything else runs. app.js waits for window.TINUE_WAIT (true: the page is being left or reloaded).
+(function () {
+  var OLD = 'https://shydrie.xyz/tinue/', LS, SS;
+  try { LS = localStorage; SS = sessionStorage; } catch (e) { return; }
+  var ROUTE = /^#\/(?:puzzle\/[A-Za-z0-9_.-]{1,64}(?:\/[0-7])?|me|leaderboard|rush|settings)?$/;
+  var get = function (k) { try { return JSON.parse(LS.getItem('tinue.' + k)); } catch (e) { return null; } };
+  var set = function (k, v) { try { LS.setItem('tinue.' + k, JSON.stringify(v)); } catch (e) {} };
+  var del = function (k) { try { LS.removeItem('tinue.' + k); } catch (e) {} };
+  var isToken = function (t) { return typeof t === 'string' && /^[a-f0-9]{48}$/.test(t); }, isGid = function (g) { return typeof g === 'string' && /^[a-f0-9]{32}$/.test(g); };
+  var isObj = function (o) { return !!o && typeof o === 'object' && !Array.isArray(o); };
+  var ownerOf = function (t) { var h = 0x811c9dc5, i; if (!t) return ''; for (i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193); return (h >>> 0).toString(36); }; // (outbox.js)
+  var EC = { name: 'ECDH', namedCurve: 'P-256' }, AES = { name: 'AES-GCM', iv: new Uint8Array(12) }; // (a fresh key per message: the iv needn't vary)
+  var b64 = function (buf) { var s = '', u = new Uint8Array(buf), i; for (i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  var un64 = function (t) { var s = atob(t.replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(s.length), i; for (i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
+  // To the old page for this browser's player there. only: just what was never sent. → whether it leaves.
+  async function go(to, only) {
+    if (window.top !== window.self) return false;
+    try {
+      var pair = await crypto.subtle.generateKey(EC, true, ['deriveKey']);
+      var s = JSON.stringify({ k: await crypto.subtle.exportKey('jwk', pair.privateKey), t: Date.now() }), pub = b64(await crypto.subtle.exportKey('raw', pair.publicKey));
+      SS.setItem('tinue.hs', s);
+      if (SS.getItem('tinue.hs') !== s) return false;
+      location.replace(OLD + '#hn=' + pub + (only ? '&m=1' : '') + (get('gid') ? '&t=' + ownerOf(get('gid')) : '') + '&to=' + encodeURIComponent(to));
+      return true;
+    } catch (e) { return false; }
+  }
+  window.tinueBring = function () { return go('#/'); };
+  async function open(s, d) {
+    var u = un64(d), priv = await crypto.subtle.importKey('jwk', s.k, EC, false, ['deriveKey']), eph = await crypto.subtle.importKey('raw', u.slice(0, 65), EC, false, []);
+    var key = await crypto.subtle.deriveKey({ name: 'ECDH', public: eph }, priv, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt(AES, key, u.slice(65))), function (k, v) { return k === '__proto__' ? undefined : v; });
+  }
+  // A player's settings and identity into this browser. What was played here without a token becomes theirs.
+  var OBJ = ['prefs', 'setUnsent', 'rush', 'rushBest', 'me'], ARR = ['ninjaTransform', 'rushHistory'];
+  function install(p) {
+    ['myRating', 'myProv', 'next', 'queue', 'me'].forEach(del);
+    if (isToken(p.token)) { set('token', p.token); del('guest'); del('seen'); } else { if (isObj(p.guest)) set('guest', p.guest); if (Array.isArray(p.seen)) set('seen', p.seen); }
+    if (isGid(p.gid)) set('gid', p.gid); else del('gid'); // (a token and its gid are one)
+    OBJ.forEach(function (k) { if (isObj(p[k])) set(k, p[k]); });
+    ARR.forEach(function (k) { if (Array.isArray(p[k])) set(k, p[k]); });
+    if (!isToken(p.token)) return;
+    var o = ownerOf(p.token), keys = [], i, q = get('rushQueue');
+    for (i = 0; i < LS.length; i++) if (/^tinue\.r\.\./.test(LS.key(i))) keys.push(LS.key(i));
+    keys.forEach(function (k) { try { var e = JSON.parse(LS.getItem(k)); e.owner = o; addResult(e); LS.removeItem(k); } catch (x) {} });
+    if (Array.isArray(q)) set('rushQueue', q.map(function (x) { if (isObj(x) && x.who === null) x.who = o; return x; }));
+  }
+  window.tinueInstall = install;
+  function addResult(e) { // (results.js checks an entry again when it reads it)
+    if (!isObj(e) || !isObj(e.body) || typeof e.puzzleId !== 'string' || !/^[\w.-]{1,64}$/.test(e.puzzleId) || typeof e.owner !== 'string' || !/^[a-z0-9]{0,12}$/.test(e.owner)) return;
+    var k = 'tinue.r.' + e.owner + '.' + e.puzzleId;
+    try { if (LS.getItem(k) == null) LS.setItem(k, JSON.stringify(e)); } catch (x) {}
+  }
+  // This browser's guest, from before it had a token: what it played is the player's who is here now.
+  function adopt(x, cur) {
+    var g = isObj(x) && (x.gid || (isObj(x.body) && isObj(x.body.guest) && x.body.guest.gid)), o = ownerOf(cur);
+    if (cur && g && g === get('gid')) { if (x.owner === '') x.owner = o; if (x.who === null) x.who = o; }
+    return x;
+  }
+  window.tinueBrought = function (t) { set('brought', { o: ownerOf(t), t: Date.now() }); };
+  // → whether the identity here changed (the page is loaded again with it).
+  function take(p) {
+    if (!isObj(p) || p.v !== 1) return false;
+    var cur = get('token'), y = isToken(p.token) ? p.token : null, q, seen = {};
+    // what was never sent, whoever is signed in here: it goes out only as the player who played it
+    if (Array.isArray(p.results)) p.results.slice(0, 50).forEach(function (e) { addResult(adopt(e, cur)); });
+    if (Array.isArray(p.rushQueue)) {
+      q = get('rushQueue'); q = (Array.isArray(q) ? q : []).filter(isObj);
+      q.forEach(function (x) { if (isObj(x.body)) seen['r' + x.body.run] = 1; });
+      p.rushQueue.slice(0, 20).forEach(function (x) { if (isObj(x) && isObj(x.body) && typeof x.body.run === 'string' && !seen['r' + x.body.run]) { seen['r' + x.body.run] = 1; q.push(adopt(x, cur)); } });
+      if (q.length) set('rushQueue', q);
+    }
+    if (p.moved) return false; // brought before
+    if (y && (get('out') || []).indexOf(ownerOf(y)) >= 0) { window.tinueBrought(y); return false; } // signed out here: stays signed out
+    if (y && y === cur) { window.tinueBrought(y); return false; }
+    if (y && cur) { try { SS.setItem('tinue.hp', JSON.stringify(p)); } catch (e) {} return false; } // two players: app.js asks
+    if (!y && (cur || get('gid'))) { if (p.known) window.tinueBrought(null); return false; }
+    install(p);
+    if (y ? get('token') === y : p.known) window.tinueBrought(y); // (known: the server said there is nobody; unanswered, it is asked again)
+    return true;
+  }
+  var h = location.hash;
+  if (!/^#h[sdn]=/.test(h)) return;
+  var part = function (k) { var m = new RegExp('[#&]' + k + '=([^&]*)').exec(h); return m ? m[1] : ''; }, to = '#/';
+  try { to = decodeURIComponent(part('to')); } catch (e) {}
+  if (!ROUTE.test(to)) to = '#/';
+  history.replaceState(null, '', location.pathname + to);
+  if (part('hs') === '1') {
+    var was = get('brought'), o = part('o'), had = isObj(was) && (!o || o === was.o);
+    if (!had || part('u') === '1') window.TINUE_WAIT = go(to, had);
+    return;
+  }
+  var s = null, d = part('hd');
+  try { s = JSON.parse(SS.getItem('tinue.hs')); SS.removeItem('tinue.hs'); } catch (e) {}
+  if (!d || !s || !(Date.now() - s.t >= 0 && Date.now() - s.t < 120e3)) return;
+  window.TINUE_WAIT = open(s, d).then(take).then(function (again) { if (again) location.reload(); return again; }, function () { return false; });
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>tinue — Tak puzzles</title>
 <meta property="og:type" content="website">
 <meta property="og:title" content="tinue · Tak puzzles">
-<meta property="og:url" content="https://shydrie.xyz/tinue/">
-<meta property="og:image" content="https://shydrie.xyz/tinue/og.png">
+<meta property="og:url" content="https://tinue.me/">
+<meta property="og:image" content="https://tinue.me/og.png">
 <meta property="og:image:width" content="600"><meta property="og:image:height" content="675">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#9cb83a">
-<link rel="preconnect" href="https://tinue-api.shydrie.xyz" crossorigin="use-credentials"><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23262421'/><g fill='%23e8e6e3'><path d='M10 15 A6 6 0 0 1 22 15 Z'/><rect x='5' y='17' width='22' height='4' rx='1.3'/><rect x='5' y='23' width='22' height='4' rx='1.3'/></g></svg>">
+<link rel="preconnect" href="https://api.tinue.me" crossorigin="use-credentials"><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23262421'/><g fill='%23e8e6e3'><path d='M10 15 A6 6 0 0 1 22 15 Z'/><rect x='5' y='17' width='22' height='4' rx='1.3'/><rect x='5' y='23' width='22' height='4' rx='1.3'/></g></svg>">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <script>/* pin the icon and manifest addresses now: the page address later becomes puzzle/<id>, where relative links would 404 */
@@ -20,8 +127,8 @@ for (const l of document.querySelectorAll('link[rel="apple-touch-icon"], link[re
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- (the font's stylesheet doesn't hold up the page: the board's iframe below starts without waiting for it) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="board.css?v=1795630197">
-<link rel="stylesheet" href="style.css?v=1795630197">
+<link rel="stylesheet" href="board.css?v=1795644385">
+<link rel="stylesheet" href="style.css?v=1795644385">
 <style>.booting main, .booting .credits { visibility: hidden; }</style>
 <script>setTimeout(() => document.documentElement.classList.remove("booting"), 2000);</script>
 <meta name="googlebot" content="noindex"><meta name="bingbot" content="noindex">
@@ -110,10 +217,10 @@ for (const l of document.querySelectorAll('link[rel="apple-touch-icon"], link[re
 <main id="view-settings" class="page settings-page hidden"></main>
 
 <footer class="credits">
-  <p>Puzzles: <a href="https://playtak.com">PlayTak</a>. 6×6: <a href="https://github.com/Ciekce/syntaks">Syntaks</a> by Ciekce and&nbsp;contributors (<a href="https://github.com/Ciekce/syntaks-nets">cnet023</a> by&nbsp;chef, <a href="https://shydrie.xyz/tinue/syntaks/NOTICE.txt">licence</a>). Other sizes: <a href="https://github.com/MortenLohne/tiltak">Tiltak</a> by Morten&nbsp;Lohne. Board: <a href="https://ptn.ninja">PTN&nbsp;Ninja</a>. Themes: <a href="https://ustak.org/tak-terminology/">USTA&nbsp;glossary</a>. <a href="LICENSE.txt">GNU&nbsp;GPL&nbsp;v3</a>. <a href="https://github.com/iCalculated/tinue">Source&nbsp;code</a>.</p>
+  <p>Puzzles: <a href="https://playtak.com">PlayTak</a>. 6×6: <a href="https://github.com/Ciekce/syntaks">Syntaks</a> by Ciekce and&nbsp;contributors (<a href="https://github.com/Ciekce/syntaks-nets">cnet023</a> by&nbsp;chef, <a href="https://tinue.me/syntaks/NOTICE.txt">licence</a>). Other sizes: <a href="https://github.com/MortenLohne/tiltak">Tiltak</a> by Morten&nbsp;Lohne. Board: <a href="https://ptn.ninja">PTN&nbsp;Ninja</a>. Themes: <a href="https://ustak.org/tak-terminology/">USTA&nbsp;glossary</a>. <a href="LICENSE.txt">GNU&nbsp;GPL&nbsp;v3</a>. <a href="https://github.com/iCalculated/tinue">Source&nbsp;code</a>.</p>
 </footer>
 
-<script src="config.js?v=1795630197"></script>
-<script type="module" src="app.js?v=1795630197"></script>
+<script src="config.js?v=1795644385"></script>
+<script type="module" src="app.js?v=1795644385"></script>
 </body>
 </html>

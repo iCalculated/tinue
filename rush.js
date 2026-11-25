@@ -5,20 +5,20 @@
 // with the puzzle page's own rules and engines (playon.js, defend.js, engine.js: see adjudicate), the clock paused
 // while they work. Nothing here is rated, and nothing here touches the puzzle page's state.
 // app.js calls enter() when the page is shown and leave() when another page is.
-import { buildPTN } from './board-kit.js?v=1795630197';
-import { SAYS, onNinjaTheme } from './ninja.js?v=1795630197';
-import { api, store, token, guestId } from './api.js?v=1795630197';
-import { confirmOn, takesHeldKey } from './settings.js?v=1795630197';
-import * as R from './rush-rules.js?v=1795630197';
-import { picture, pictureHTML } from './rush-look.js?v=1795630197';
-import { pictureLook } from './rush-theme.js?v=1795630197';
-import * as engine from './engine.js?v=1795630197';
-import * as tiltak from './tiltak.js?v=1795630197';
-import { defender, ending, legalMove, capWait, playOutOf, applyProofLength, pliesLeftOf, slowerWinsAt, upgradeToProven, measureProof, defenderName } from './playon.js?v=1795630197';
-import { defenderMove, warmDefender, waitAtCap } from './defend.js?v=1795630197';
-import { busy, BUSY_MS } from './busy.js?v=1795630197';
-import * as SYM from './shared/sym.js?v=1795630197';
-import * as sound from './sound.js?v=1795630197'; // (moves click through board-kit.js hooks.onPly, set by app.js; the verdicts are played here)
+import { buildPTN } from './board-kit.js?v=1795644385';
+import { SAYS, onNinjaTheme } from './ninja.js?v=1795644385';
+import { api, store, token, guestId } from './api.js?v=1795644385';
+import { confirmOn, takesHeldKey } from './settings.js?v=1795644385';
+import * as R from './rush-rules.js?v=1795644385';
+import { picture, pictureHTML } from './rush-look.js?v=1795644385';
+import { pictureLook } from './rush-theme.js?v=1795644385';
+import * as engine from './engine.js?v=1795644385';
+import * as tiltak from './tiltak.js?v=1795644385';
+import { defender, ending, legalMove, capWait, playOutOf, applyProofLength, pliesLeftOf, slowerWinsAt, upgradeToProven, measureProof, defenderName } from './playon.js?v=1795644385';
+import { defenderMove, warmDefender, waitAtCap } from './defend.js?v=1795644385';
+import { busy, BUSY_MS } from './busy.js?v=1795644385';
+import * as SYM from './shared/sym.js?v=1795644385';
+import * as sound from './sound.js?v=1795644385'; // (moves click through board-kit.js hooks.onPly, set by app.js; the verdicts are played here)
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -879,13 +879,14 @@ async function endRun(wrong = null, played = false) {
   if (s.gone) return showBest(null, null, s, s.gone === 'left' ? 'left' : null); // already sent (pagehide)
   // Posted here when the run ended by itself (the clock, or a streak's miss); one left unfinished is posted as abandoned
   // (abandon(): leave(), a new run, pagehide), never a best.
-  if (s.snap) unqueue(s.token); // (a hidden tab's snapshot: the run ended after all)
+  if (s.snap) { s.snap = false; unqueue(s.token); } // (a hidden tab's snapshot: the run ended after all)
   if (!s.run.results.length) return showBest(null, null, s);
   const body = { ...R.resultBody(s.run, +window.TINUE_BUILD || 0, envOf(s)), playedAt: R.playedAtOf(s.run.endedAt, performance.now(), Date.now()), run: s.token, pages: s.pages, ...(s.who ? {} : { guest: { gid: guestId() } }) };
+  enqueue(body, s.who, true); // (queued before it is posted, as a fresh snapshot other tabs leave alone: a tab closed now loses nothing)
   let r = null, failed = R.who(token) !== s.who; // signed in or out since it started: held for the player who played it
   if (!failed) try { r = await api('/api/rush/result', body, { quiet: true }); } catch { failed = true; }
   const out = R.postOutcome(r, failed);
-  if (out === 'keep') enqueue(body, s.who); else keepBest(r);
+  if (out === 'keep') enqueue(body, s.who); else { unqueue(body.run); keepBest(r); }
   showBest(r, mode, s, out);
 }
 // The end screen for a run: s, the run just played (Play again, its best and the post's answer to come), or null for

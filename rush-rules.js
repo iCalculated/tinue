@@ -2,10 +2,10 @@
 // judging a move by the puzzle's line, where an off-line move goes next (the puzzle page's adjudication: route,
 // playOutOutcome), the clock and its pauses, the combo and its time bonuses, and the end-of-run numbers.
 // public/rush.js owns the screen and the engines and calls these with the time it read.
-import { Game, colorOf, typeOf } from './shared/tak.js?v=1795630197';
-import { quickOutcome, provenPlayOut, provenLossLead, ENGINE_MS, CAP_WAIT_MS } from './playon.js?v=1795630197';
-import * as SYM from './shared/sym.js?v=1795630197';
-import { moveShape } from './analysis.js?v=1795630197';
+import { Game, colorOf, typeOf } from './shared/tak.js?v=1795644385';
+import { quickOutcome, provenPlayOut, provenLossLead, ENGINE_MS, CAP_WAIT_MS } from './playon.js?v=1795644385';
+import * as SYM from './shared/sym.js?v=1795644385';
+import { moveShape } from './analysis.js?v=1795644385';
 
 export const SIZE = 6; // Rush and Streak are 6×6 only (server/rush.js refuses any other size)
 export const RUSH_MS = 180e3; // 3:00
@@ -690,12 +690,14 @@ export function postOutcome(answer, failed = false) {
   return FINAL.has(answer.error) ? 'drop' : 'keep';
 }
 // Results waiting to be sent, oldest first: { t (its token's time), body }; the newest QUEUE_MAX, none past the
-// token's lifetime, one per run.
+// token's lifetime, one per run. A fresh snapshot (a run being posted right now, or a hidden tab's) doesn't push one out.
 export function queueOf(raw, now) {
   const seen = new Set();
   const q = (Array.isArray(raw) ? raw : []).filter((x) => !!x && typeof x === 'object' && num(x.t) && now - x.t < RUN_TTL_MS
     && !!x.body && typeof x.body === 'object' && str(x.body.run, 200) && !seen.has(x.body.run) && seen.add(x.body.run));
-  return q.sort((a, b) => a.t - b.t).slice(-QUEUE_MAX);
+  q.sort((a, b) => a.t - b.t);
+  const fresh = (x) => x.snap && now - x.snap < SNAP_FRESH_MS, keep = new Set(q.filter((x) => !fresh(x)).slice(-QUEUE_MAX));
+  return q.filter((x) => fresh(x) || keep.has(x));
 }
 
 export const clockText = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
