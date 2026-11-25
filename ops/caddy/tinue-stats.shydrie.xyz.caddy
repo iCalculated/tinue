@@ -1,6 +1,4 @@
-# The old name's DNS stays on crux's Cloudflare tunnel, which hands it here over the ssh hop: plain http, from loopback
-# (its CF-Connecting-IP is believed there, see cloudflare-ranges.sh). With an A record instead: drop "http://", add
-# "import tls".
+# The old name's DNS stays on crux's Cloudflare tunnel, which hands it here over the ssh hop (plain http, from loopback).
 http://tinue-stats.shydrie.xyz {
-	import proxy 127.0.0.1:8792
+	redir https://stats.tinue.me{uri} 302
 }

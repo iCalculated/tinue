@@ -42,7 +42,7 @@ const kids = new Set();
     const srv = JSON.parse(r.stdout).apps.http.servers.srv0;
     assert.ok(Object.values(JSON.parse(r.stdout).apps.http.servers).some((s) => s.listen.includes(':80')), 'port 80 answers'); assert.deepEqual(srv.client_ip_headers, ['CF-Connecting-IP']); assert.ok(srv.trusted_proxies.ranges.length >= 20);
     assert.equal(r.stdout.match(/"dial":"127\.0\.0\.1:8641"/g).length, 2, 'both API names through the gate');
-    assert.equal(r.stdout.match(/"X-Forwarded-For":\["\{http\.vars\.client_ip\}"\]/g).length, 4); assert.ok(!/try_duration|request_buffers/.test(r.stdout));
+    assert.equal(r.stdout.match(/"X-Forwarded-For":\["\{http\.vars\.client_ip\}"\]/g).length, 3); assert.ok(!/try_duration|request_buffers/.test(r.stdout));
   } else console.log('  (no caddy here: its configuration was not checked)');
   // provisioning and the engine build change nothing under --dry-run
   fs.writeFileSync(path.join(T, 'k.pub'), 'ssh-ed25519 TESTKEY someone@somewhere\n');
