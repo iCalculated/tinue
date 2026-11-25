@@ -9,10 +9,11 @@ import * as engine from './engine.js';
 import { showLineOn, moveSquares } from './lines.js';
 import * as tiltak from './tiltak.js';
 import * as syntaks from './syntaks.js';
-import { API, api, store, token, setToken, guestId, notice, setNotice, onNotice, WAIT_NOTICE } from './api.js';
+import { API, api, store, token, setToken, guestId, notice, setNotice, onNotice, onAnswered, WAIT_NOTICE } from './api.js';
 import { createNext } from './next.js';
 import { BUSY_MS, busy, busyUntil, endLocked, barHide } from './busy.js';
 import { createOutbox, ownerOf } from './outbox.js';
+import { createResults, settles } from './results.js';
 import * as sound from './sound.js';
 import { confirmOn, soundOn, soundOf, holds, phaseKey, pending, pendingAct, settingsNote, takesHeldKey } from './settings.js';
 import { defender, ending, legalMove, gameRated, unratedWhy, winRated, lossRated, lossWhy, provenPlayOut, heldDisplaced, quickOutcome, capWait, provenLossLead, deferredResendOk, answerOwnsToken, stalls, heldResend, settledHeld, legalPrefix, pliesLeftOf, slowerWinsAt, playOutOf, applyProofLength, defenderName, upgradeToProven, measureProof, isTak, countTak, outOfMoves, takLeft, TAK_COUNTDOWN, replyEntry, logOk, leftRunsOn, runOnHeld, noEnding, REFUTED, ENGINE_MS } from './playon.js';
@@ -97,7 +98,8 @@ const heldRec = {
     // A settled record of another puzzle (its upload failed, kept for a resend) mustn't be lost by this one replacing it:
     // send it now, as flushHeld would (quiet, not awaited; its page is this one, so it isn't checked for being alive).
     // If its first upload is still on its way, only resend when that one fails (else it would be sent twice).
-    const prev = heldRec.get(), send = heldDisplaced(prev, v.id, owner()), epoch = authEpoch;
+    // (nothing to do when it waits in the results queue: results.js)
+    const prev = heldRec.get(), send = prev && results.has(prev.id, prev.owner) ? null : heldDisplaced(prev, v.id, owner()), epoch = authEpoch;
     if (send) {
       const go = (si = signIn) => api(withBuild('/api/result', send.build), { ...send.body, ...(token ? {} : { guest: guestSeed() }) }, { quiet: true })
         .then((r) => { if (r?.token && answerOwnsToken(si, signIn)) { setToken(r.token); ownHeld(); } }, () => {});
@@ -111,8 +113,9 @@ const heldRec = {
   del(id) { try { if (id == null || heldRec.get()?.id === id) sessionStorage.removeItem('tinue.held'); } catch {} },
 };
 // A token a result just made for this browser (its first result made it a guest): a record held from before it had
-// one is this guest's, so it is stamped as theirs (only the owner: its build stays the one that wrote it).
-const ownHeld = () => { try { const h = heldRec.get(); if (h?.id && h.owner === '') sessionStorage.setItem('tinue.held', JSON.stringify({ ...h, owner: owner() })); } catch {} };
+// one is this guest's, so it is stamped as theirs (only the owner: its build stays the one that wrote it), and so are
+// the results and Rush runs waiting to be sent.
+const ownHeld = () => { results.own(); try { const q = store.get('rushQueue', []); if (token && Array.isArray(q) && q.some((x) => x?.who === null)) store.set('rushQueue', q.map((x) => (x?.who === null ? { ...x, who: owner() } : x))); } catch {} try { const h = heldRec.get(); if (h?.id && h.owner === '') sessionStorage.setItem('tinue.held', JSON.stringify({ ...h, owner: owner() })); } catch {} };
 // Whether the page that wrote a held record is still open (its lock is taken). A lock a reload has just let go of may
 // take a moment to free, so it gets 1.5 s; without Web Locks, as before (sent).
 const pageAlive = (page) => {
@@ -149,6 +152,29 @@ let authEpoch = 0;
 // answer or only as the cookie):
 // a result's answer that left before keeps its own minted token and user to itself (answerOwnsToken).
 let signIn = 0;
+// Results on their way to the server, kept until it has them (results.js). Sent again at load, when the browser comes
+// online, after any answered call, and on a timer. Settled late: the rating, and the card if that puzzle is still shown.
+const results = (() => {
+  let ls = null; try { ls = localStorage; } catch {}
+  let si = 0;
+  const q = createResults({ storage: ls, owner, send: (e) => { si = signIn; return api(withBuild('/api/result', e.b), { ...e.body, ...(token ? {} : { guest: { gid: e.gid || guestSeed().gid } }) }, { quiet: true }); },
+    settled: (e, r) => {
+      const ours = answerOwnsToken(si, signIn), s = S;
+      const h = heldRec.get();
+      if (h?.id === e.puzzleId && h.owner === e.owner) heldRec.del(h.id);
+      if (r.token && ours) { setToken(r.token); ownHeld(); }
+      if (r.user && ours) { me = r.user; renderUser(); }
+      if (notice?.kind === 'net' || notice?.kind === 'wait') { setNotice(null); renderAll(); } // (it answers again)
+      if (s?.queued && s.p.id === e.puzzleId) {
+        s.queued = false; s.resend = false; s.notCounted = r.user ? null : 'error';
+        if (r.user) { s.delta = r.rated ? r.userDelta : null; s.serverRated = !!r.rated; s.repeat = !r.rated && !s.casual; if (r.rated) s.p.attempts++; }
+        renderAll();
+      }
+    } });
+  onAnswered(() => q.answered());
+  addEventListener('online', () => q.answered());
+  return q;
+})();
 
 // The board: PTN Ninja's, in an iframe (ninja.js), for everyone (tinue's own, board.js, is retired; a stored Board
 // setting or a ?board= in the address is ignored). A finished move goes through moveIn (Confirm moves). While PTN
@@ -229,7 +255,7 @@ function renderUser() {
       if (r.error) return showErr('#claim-err', r.error);
       if (r.token && token && r.token !== token) authEpoch++; // another account now (a guest naming its own row isn't)
       signIn++; // signed in as the named account now (its token may come only as a cookie): an answer on its way stays out
-      if (r.token) setToken(r.token);
+      if (r.token) { const first = !token; setToken(r.token); if (first) ownHeld(); }
       me = r.user; renderUser(); settingsArrived(r); refreshPage();
     };
     $('#tok').onsubmit = async (e) => {
@@ -279,7 +305,7 @@ const nextQuery = (skip) => { // skip: a puzzle id to leave out (one whose resul
   const q = new URLSearchParams({ difficulty: prefs.difficulty });
   if (prefs.size) q.set('size', prefs.size);
   if (prefs.theme) q.set('theme', prefs.theme);
-  const ex = [...(token ? [] : legacySeen.slice(-200)), ...(skip ? [skip] : [])];
+  const ex = [...(token ? [] : legacySeen.slice(-200)), ...(skip ? [skip] : []), ...results.ids()]; // (results still to be sent: the server doesn't know those were played)
   if (!token) q.set('rating', Math.round(myRating().rating));
   if (ex.length) q.set('exclude', ex.join(','));
   return q.toString();
@@ -337,7 +363,7 @@ if (BUILD) {
 // solution shown). Before the first move it stays if it was up as the puzzle started (fresh: start()), but doesn't
 // newly appear: the check answers after the board is playable, maybe as the player taps (busy.js barHide).
 // renderAll calls this too.
-const BAR_TEXT = 'tinue was updated. Reload to get the fixes. Your rating and puzzle queue are kept.';
+const BAR_TEXT = 'tinue was updated. Reload to get the fixes. Your rating is kept.';
 function renderBuildBar(fresh = false) {
   const bar = $('#build-bar'), live = $('#build-live');
   if (!bar) return; // an older index.html
@@ -345,7 +371,7 @@ function renderBuildBar(fresh = false) {
   if (bar.hidden === hide) return;
   bar.hidden = hide;
   if (!hide && !bar.firstChild) {
-    bar.innerHTML = '<span class="msg">tinue was updated. <span class="muted">Reload to get the fixes. Your rating and puzzle queue are kept.</span></span>'
+    bar.innerHTML = '<span class="msg">tinue was updated. <span class="muted">Reload to get the fixes. Your rating is kept.</span></span>'
       + '<button type="button" class="primary reload">Reload</button><button type="button" class="x" aria-label="Dismiss" title="Dismiss">×</button>';
     bar.querySelector('.reload').addEventListener('click', reloadNow);
     bar.querySelector('.x').addEventListener('click', () => { buildBarHidden = true; renderBuildBar(); }); // until the next puzzle
@@ -1018,22 +1044,26 @@ async function report(win, s = S, flags = s, { keepalive = false, ms } = {}) {
   // (the log's moves in the puzzle's own orientation: pagesym.js toServer)
   const p = s.p, timing = { ms: (s.decidedMs ?? elapsed(s)) ?? undefined, log: s.log.length ? s.x.log(s.log) : undefined };
   let answered = false;
+  // Queued before it is posted (results.js). An earlier result for this puzzle still unsent stands, as it would at the server.
+  const entry = results.add({ puzzleId: p.id, body: { puzzleId: p.id, win, ...(s.casual ? { casual: true } : { theme: s.theme || undefined }), ...timing }, b: BUILD, owner: owner(), gid: token ? null : guestId() });
   // Sent as the page goes away: this request carries the result, so the held copy isn't flushed again (unrated) on the
   // next load; otherwise which of the two reached the server first would decide (a play-on left by reloading is rated).
   if (keepalive) heldRec.del(p.id);
   // A held result settled now: if the page reloads before the server has it, flushHeld sends this result (under this
   // build), not an unrated miss (the server keeps only the first, so a resend of one that landed changes nothing).
   else if (heldRec.get()?.id === p.id) heldRec.set(settledHeld(p.id, timing, win, s.casual, s.theme));
-  try { // a failed upload (network, server restart) loses this result (a held one waits for a reload), not the session
+  try { // a failed upload (network, server restart): the result waits in the queue (a held one for a reload, where storage is unavailable)
     // noWait: a slow upload mustn't swap the card (and its Hint button) for the waiting notice; a failed one still says so
     const si = signIn; // (a sign-in while this is on its way keeps its token: answerOwnsToken)
-    const req = api(withBuild('/api/result'), { puzzleId: p.id, win, ...(s.casual ? { casual: true } : { theme: s.theme || undefined }), ...timing,
+    results.start(entry);
+    const req = api(withBuild('/api/result', entry?.b ?? BUILD), { ...(entry?.body ?? { puzzleId: p.id, win, ...(s.casual ? { casual: true } : { theme: s.theme || undefined }), ...timing }),
       ...(token ? {} : { guest: guestSeed() }) }, { noWait: true, keepalive }); // the first result makes a first-time visitor a guest
     reporting.add(req); req.catch(() => {}).finally(() => reporting.delete(req)); // (a reload for a newer build waits for it)
     uploading.set(p.id, req); req.catch(() => {}).finally(() => { if (uploading.get(p.id) === req) uploading.delete(p.id); });
     const r = await req;
     if (uploading.get(p.id) === req) uploading.delete(p.id); // answered: done now, not a tick later in its finally(), so the card below is drawn once
     const ours = answerOwnsToken(si, signIn);
+    if (entry && settles(r)) results.drop(entry);
     if (r.token && ours) { setToken(r.token); ownHeld(); }
     // Refused: 429 (too many results, or too many new guests from one address) or any other error; nothing was rated.
     if (!r.user && r.error) s.notCounted = /^too many/i.test(r.error) ? 'rate' : 'error';
@@ -1048,6 +1078,9 @@ async function report(win, s = S, flags = s, { keepalive = false, ms } = {}) {
       if (ours) { me = r.user; renderUser(); } // (else it's the guest this result went in under, not who's signed in now)
     }
   } catch { s.delta = null; s.notCounted = 'lost'; }
+  results.stop(entry);
+  s.queued = !answered && !!entry && results.has(entry.puzzleId, entry.owner); // (sent when the server is back)
+  if (s.queued) results.failed(s.notCounted === 'lost');
   // Not recorded, but the held copy is still there: a reload of this tab sends it (flushHeld). The cards say which.
   s.resend = !answered && !keepalive && heldRec.get()?.id === p.id;
   session.push({ id: p.id, win, delta: s.delta }); saveSession();
@@ -1135,9 +1168,11 @@ addEventListener('pagehide', () => { abandonAll({ keepalive: true }); shadow((o)
 // is served: what it goes as, or whether it's dropped, is playon.js heldResend. Unreachable: kept for the next load.
 async function flushHeld() {
   const h = heldRec.get();
-  if (!h?.id) return null;
+  if (!h?.id) return results.flush();
   const send = heldResend(h, owner(), await pageAlive(h.page));
-  if (!send) return heldRec.del(h.id);
+  if (!send) { heldRec.del(h.id); return results.flush(); }
+  // Into the results queue (a result of this puzzle already there stands), or posted from here where storage is unavailable.
+  if (results.add({ puzzleId: h.id, body: send.body, b: send.build, owner: h.owner, gid: token ? null : guestId() })) { heldRec.del(h.id); return results.flush(); }
   try {
     // (registered like report()'s, so a record that is still being flushed when the first puzzle displaces it waits)
     const si = signIn;
@@ -1145,7 +1180,7 @@ async function flushHeld() {
     uploading.set(h.id, req); req.catch(() => {}).finally(() => { if (uploading.get(h.id) === req) uploading.delete(h.id); });
     const r = await req;
     if (r?.token && answerOwnsToken(si, signIn)) setToken(r.token);
-    heldRec.del(h.id);
+    if (settles(r)) heldRec.del(h.id);
   } catch {}
 }
 
@@ -1926,6 +1961,7 @@ function renderAll(mood) {
 const notCountedText = () => {
   const n = S.notCounted;
   if (!n) return '';
+  if (S.queued) return n === 'rate' ? 'Not sent yet: too many results too quickly. It will be sent in a bit.' : 'Not sent yet; it will be sent when the server is back.';
   if (S.resend && n === 'lost') return 'Your result isn’t saved yet: the server didn’t answer. Reload the page to send it again.';
   return n === 'rate' ? 'Not rated: too many results too quickly; try again in a bit.'
     : n === 'lost' ? 'Your result couldn’t be saved: the server didn’t answer.' : 'Not rated: the server didn’t record this result.';

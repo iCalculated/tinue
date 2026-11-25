@@ -254,9 +254,9 @@ await test('app.js: one place orients (loadById), one boundary maps back, and th
   // every engine call that takes a position takes enginePos (none builds one from S.p.tps)
   for (const m of src.matchAll(/engine\.(checkStill|refute|analyze|proofLength|lines)\(\{ \.\.\.(\w+)/g)) assert.equal(m[2], 'enginePos', m[0]);
   assert.equal([...src.matchAll(/engine\.(checkStill|refute|analyze|proofLength|lines)\(/g)].length, 5, 'every engine call is in that list');
-  // nothing else posts moves: /api/result only from report and from held records (no moves in them), /api/move only via the outbox
+  // nothing else posts moves: /api/result only from report, from held records (no moves in them) and from the results queue (report's bodies as stored), /api/move only via the outbox
   assert.equal(src.split("'/api/move'").length, 2);
-  assert.equal(src.split("withBuild('/api/result'").length, 4);
+  assert.equal(src.split("withBuild('/api/result'").length, 5);
 });
 
 // ---------- the analysis after a puzzle, run for real ----------

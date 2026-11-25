@@ -39,6 +39,8 @@ export let notice = null; // a message that replaces the turn card: {kind: 'wait
 const offlineOr = (n) => ((n?.kind === 'wait' || n?.kind === 'net') && navigator.onLine === false
   ? { kind: n.kind, title: 'You seem to be offline', body: 'Puzzles will load again when your connection is back.' } : n);
 export const setNotice = (n) => { notice = offlineOr(n); };
+let answered = () => {};
+export const onAnswered = (fn) => { answered = fn; }; // some call got an answer: the network is there (results.js)
 let redraw = () => {};
 export const onNotice = (fn) => { redraw = fn; }; // how api() redraws the page after changing the notice
 
@@ -83,7 +85,7 @@ export const api = async (path, body, { quiet = false, noWait = quiet, timeout, 
     const ms = performance.now() - t0;
     // Engine analysis is slow by design (a ~1.2 s search, maybe queued) and aborted on purpose; not a network signal.
     if ((ms > 2000 || outcome !== 'ok') && path !== '/api/slow' && !path.startsWith('/api/analyze') && !path.startsWith('/api/defend')) reportSlow(path, ms, outcome, { err, tries });
-    if (outcome !== 'failed') { lastOk = performance.now(); flushSlow(); } // the server answered: send what waited
+    if (outcome !== 'failed') { lastOk = performance.now(); flushSlow(); answered(); } // the server answered: send what waited
   }
 };
 
