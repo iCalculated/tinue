@@ -68,7 +68,7 @@ case "$CMD" in
     S=$(on_ovh state); case "$S" in *'served=yes'*|*'"mode":"pass","port":8642'*) echo "move: the new host has taken requests; abort would lose them. Use rollback." >&2; exit 1 ;; esac
     on_ovh hold; on_ovh stop; on_crux unfence; on_ovh pass 8643; t "back on crux" ;;
   rollback)
-    S=$(on_ovh state); case "$S" in *writer=yes*|*moved=yes*|*served=yes*|*dry-run*) ;; *) echo "move: the new host never had the database" >&2; exit 1 ;; esac
+    S=$(on_ovh state); case "$S" in *served=yes*|*dry-run*) ;; *) echo "move: the new host has served nothing since it last had the database, so its copy may be an old one; a stopped go is undone by: move.sh abort" >&2; exit 1 ;; esac
     case "$A" in *--any-commit*) ;; *) same_commit ;; esac
     on_crux hop start # (asks through it: nothing is held or stopped without a way back)
     t "upstream gate"; [ -n "$DRY" ] || $SSH "$TINUE_HOST" 'sudo -n sh /srv/tinue/ops/upstream.sh gate'

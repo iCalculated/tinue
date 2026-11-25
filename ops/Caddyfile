@@ -34,5 +34,10 @@
 	}
 }
 
+# Port 80 answers from the first start (the hop asks it through the tunnel; no public name matches this).
+http://127.0.0.1 {
+	respond 204
+}
+
 import upstream.caddy
 import sites/*.caddy

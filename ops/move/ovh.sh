@@ -86,6 +86,7 @@ case "${1:-}" in
   stop) [ ! -e "$G/SERVED" ] || die "SERVED is here: this host's database is the newest; use rollback"
     systemctl stop tinue-players.service tinue.service; stopped; rm -f "$G/WRITER"; echo "ovh: stopped, WRITER gone" ;;
   fence)
+    [ -e "$G/SERVED" ] || die "this host has served nothing since it last had the database: its copy may be an old one"
     if [ ! -e "$D/MOVED" ]; then
       systemctl stop tinue-backup.service tinue-players.service tinue.service; stopped
       rm -f "$G/WRITER"; as tinue touch "$D/MOVED"

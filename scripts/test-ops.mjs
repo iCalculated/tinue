@@ -40,7 +40,7 @@ const kids = new Set();
     const r = spawnSync('caddy', ['adapt', '--adapter', 'caddyfile', '--config', path.join(C, 'Caddyfile')], { encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: C, XDG_CONFIG_HOME: C } });
     assert.equal(r.status, 0, r.stderr);
     const srv = JSON.parse(r.stdout).apps.http.servers.srv0;
-    assert.deepEqual(srv.client_ip_headers, ['CF-Connecting-IP']); assert.ok(srv.trusted_proxies.ranges.length >= 20);
+    assert.ok(Object.values(JSON.parse(r.stdout).apps.http.servers).some((s) => s.listen.includes(':80')), 'port 80 answers'); assert.deepEqual(srv.client_ip_headers, ['CF-Connecting-IP']); assert.ok(srv.trusted_proxies.ranges.length >= 20);
     assert.equal(r.stdout.match(/"dial":"127\.0\.0\.1:8641"/g).length, 2, 'both API names through the gate');
     assert.equal(r.stdout.match(/"X-Forwarded-For":\["\{http\.vars\.client_ip\}"\]/g).length, 3); assert.ok(!/try_duration|request_buffers/.test(r.stdout));
   } else console.log('  (no caddy here: its configuration was not checked)');
@@ -158,7 +158,7 @@ await solve();
   fs.writeFileSync(rev, REV.replace('a'.repeat(40), 'b'.repeat(40))); let x = await move(['go']); assert.notEqual(x.code, 0); assert.match(x.out, /not the same commit/);
   fs.writeFileSync(rev, REV); fs.writeFileSync(path.join(SH, 'pgrep.busy'), ''); x = await move(['go']); assert.notEqual(x.code, 0); assert.match(x.out, /something else is writing/); fs.rmSync(path.join(SH, 'pgrep.busy'));
   fs.writeFileSync(path.join(GD, 'WRITER'), ''); x = await move(['go']); assert.notEqual(x.code, 0); assert.match(x.out, /SERVED is here already/); fs.rmSync(path.join(GD, 'WRITER'));
-  x = await move(['rollback']); assert.notEqual(x.code, 0); assert.match(x.out, /never had the database/);
+  x = await move(['rollback']); assert.notEqual(x.code, 0); assert.match(x.out, /has served nothing/);
   assert.equal(gstatus().mode, 'pass', 'nothing held by a refusal'); await solve();
   console.log('rehearsal and refusals: ok');
 }
@@ -271,7 +271,10 @@ await solve();
   let r = await playing(move(['rollback'])); ok(r, 'rollback'); assert.equal(gstatus().port, CRUX);
   await solve(); assert.deepEqual(attempts(CDB), { n: sent, d: sent }, 'every result came back, once');
   assert.ok(!fs.existsSync(path.join(GD, 'WRITER')) && fs.existsSync(path.join(OD, 'MOVED')) && !fs.existsSync(path.join(CD, 'MOVED')));
-  r = await playing(move(['rollback'])); ok(r, 'rollback again'); await solve(); assert.deepEqual(attempts(CDB), { n: sent, d: sent }, 'run twice, the older database does not come back over the newer');
+  r = await move(['rollback']); assert.notEqual(r.code, 0); assert.match(r.out, /served nothing/); await solve(); assert.deepEqual(attempts(CDB), { n: sent, d: sent }, 'run twice, the older database does not come back over the newer');
+  // a second go that stops between crux's fence and the copy: rollback must not serve the copy left from the first one
+  await solve(); fs.writeFileSync(path.join(T, 'fail-send'), ''); const stop = move(['go']); const g2 = await stop; assert.notEqual(g2.code, 0); fs.rmSync(path.join(T, 'fail-send'));
+  r = await move(['rollback']); assert.notEqual(r.code, 0); assert.match(r.out, /move.sh abort/); r = await move(['abort']); ok(r, 'abort'); await solve(); assert.deepEqual(attempts(CDB), { n: sent, d: sent });
   r = await playing(move(['go'])); ok(r, 'go after a rollback'); await solve(); assert.deepEqual(attempts(ODB), { n: sent, d: sent });
   console.log('rollback: ok (and a second one changes nothing, and go works after it)');
 }
