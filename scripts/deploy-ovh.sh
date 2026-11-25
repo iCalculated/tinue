@@ -41,6 +41,7 @@ TINUE_JUDGE=$JUDGE
 TINUE_MOVED_FROM=
 TINUE_MOVED_TO=https://api.tinue.me
 TINUE_SYNTAKS=/opt/syntaks/syntaks
+TINUE_SYNTAKS_THREADS=2
 TINUE_HANDOFF_ORIGIN=https://shydrie.xyz
 ENV
   W=$(sudo -n sh /srv/tinue/ops/provision.sh --dry-run 2>&1 | grep "provision: write" || true); [ -z "$W" ] || printf "deploy: WARNING not applied yet (run provision.sh on the host):\n%s\n" "$W"

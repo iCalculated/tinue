@@ -8,7 +8,8 @@
 //   A search without `lines` (lines 1: /api/defend, today's clients) sends the same engine commands and returns the
 //   same fields as before MultiPV existed. An engine that ignores MultiPV gives one line and multipv: false.
 //
-// One search at a time per process, Threads 1, so the pool is the CPU budget: POOL cores for MOVETIME each.
+// One search at a time per process, so the pool is the CPU budget: POOL x THREADS cores for MOVETIME each.
+// TINUE_SYNTAKS_THREADS (default 1): the OVH host runs 2, about the nodes crux searches with 1.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -19,6 +20,7 @@ const DEFAULT_BIN = os.homedir() + '/syntaks-opt/final/syntaks-final';
 export const BIN = process.env.TINUE_SYNTAKS || (fs.existsSync(DEFAULT_BIN) ? DEFAULT_BIN : '');
 export const available = () => !!BIN && fs.existsSync(BIN);
 
+const THREADS = Math.min(8, Math.max(1, Math.floor(Number(process.env.TINUE_SYNTAKS_THREADS)) || 1));
 const POOL = 2, MOVETIME = 1200, MAX_QUEUE = 12, MAX_PRIORITY = 4, CACHE_MAX = 2000;
 const GRACE = 2500; // past MOVETIME: send stop; another GRACE and the process is killed (a wedged search must not block the pool)
 const IDLE_MS = 15 * 60e3; // idle processes exit, so a quiet server holds no engine memory
@@ -50,7 +52,7 @@ function start() {
   child.on('exit', (code, sig) => die(`syntaks exited (${sig || code})`));
   child.on('error', (e) => die('syntaks: ' + e.message));
   child.stdin.on('error', () => {}); // EPIPE after a crash; 'exit' handles it
-  send(p, 'tei\nsetoption name Threads value 1\nsetoption name Hash value 64\nsetoption name MateScores value true\nsetoption name HumanWDL value true');
+  send(p, 'tei\nsetoption name Threads value ' + THREADS + '\nsetoption name Hash value 64\nsetoption name MateScores value true\nsetoption name HumanWDL value true');
   procs.push(p);
   return p;
 }
