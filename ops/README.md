@@ -47,6 +47,9 @@ mode Full (strict), "Always Use HTTPS" off (a redirect would meet a name with no
 limited, so enable a name only when its challenge reaches this host:
 
 1. `api.tinue.me`: make the proxied A record, then `sudo sh /srv/tinue/ops/site.sh api.tinue.me`. Nobody uses the name yet.
+> As deployed: `tinue-api` and `tinue-stats.shydrie.xyz` keep their tunnel on crux; its ingress for both is
+> `http://127.0.0.1:8644` (the hop, so the hop stays up), and step 2 is not needed.
+
 2. `tinue-api.shydrie.xyz` gets its certificate **before** its DNS changes, while players still go through the tunnel:
    - hop up (below): crux's port 8644 is this host's port 80;
    - in the tunnel's ingress, above the tinue-api rule: hostname `tinue-api.shydrie.xyz`, path `^/\.well-known/acme-challenge/`,
