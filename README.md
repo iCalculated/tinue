@@ -250,12 +250,13 @@ puzzle's start (a batch slow or failed), that puzzle also gets the pair, so nobo
 
 ### Themes
 
-Detected from the main line (Lichess `cook.py` style), see `shared/themes.js`: length (road in 1, tinuë
-in 2/3/4+), gaelet (flat win), non-Tak tinuë (key `quietMove`: a forced road with a non-threatening step in its line; never on gaelets), fork (two road threats at once), smash, spread, throw, stack
-road, drawbridge (key `reveal`), capture, defend-first, placement-only, dragon clause, board size. Vocabulary
-follows USTA's terminology page (https://ustak.org/tak-terminology/) where it has a term (spread, throw, smash,
-drawbridge, fork, gaelet, dragon clause); stack road, defend first, placement only and non-Tak tinuë are our own
-descriptive names.
+Tagged from the main line (Lichess `cook.py` style) by `tagPuzzle` in `shared/analyze.js`; names and the definitions
+players see (under the Theme menu, and on a finished puzzle's tags) are in `shared/themes.js`. Keys: `roadIn1`,
+`tinueIn2`/`3`/`4` (Road in 2, 3, 4+), `deep` (a list, `scripts/deep-proven.jsonl`), `gaelet` (Flat win), `fork`,
+`quietMove` (Non-Tak tinuë; never on flat wins), `smash`, `spread`, `throw`, `stackRoad`, `reveal` (Drawbridge),
+`capture`, `wallBlock` (Defend first), `placement`, `dragon`, and the board size. Names follow USTA's terminology page
+(https://ustak.org/tak-terminology/) where it has a term; Road in N, Deep tinuë, Non-Tak tinuë, Stack road, Defend
+first and Placement only are our own.
 
 ## Data sources
 

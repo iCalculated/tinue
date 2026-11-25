@@ -177,7 +177,7 @@ test('the settings: the board\'s theme and look, Confirm moves and Sound, on the
   assert.doesNotMatch(css, /^\.settings[ .{]|\.set-head|\.set-all/m, 'no CSS left for the block');
   assert.match(app, /const CTL = \{\n {2}confirm: [^\n]*\n {2}sound: [^\n]*\n\};/);
   // Confirm moves says what confirms on PTN Ninja's board (its taps stay in its frame: no second tap)
-  assert.match(app, /sel\('confirm', 'Confirm moves', 'A move waits on the board until you confirm it: press Confirm or Enter\.'\)/);
+  assert.match(app, /sel\('confirm', 'Confirm moves', 'A move waits until you press Confirm or Enter\.'\)/);
 });
 
 test('Sound: Off / Light / Thunk / Deep, the default voice unless stored; the select, its handler, the hooks, the build', () => {

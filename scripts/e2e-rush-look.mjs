@@ -54,7 +54,7 @@ const srv = http.createServer(async (req, res) => {
       return json({ puzzle: p ? { ...p, themes: [], attempts: 1, solves: 0, rd: 80, source: 'playtak', sourceRef: '1', meta: {} } : null });
     }
     if (u.pathname === '/api/rush/top') return json({ top: [] });
-    if (u.pathname === '/api/themes') return json({ themes: {} }); // (the glossary, the other page visited)
+    if (u.pathname === '/api/themes') return json({ themes: {} });
     return json({ error: 'unknown route' }, 404);
   }
   let f = path.join(ROOT, 'public', decodeURIComponent(u.pathname));
@@ -146,7 +146,7 @@ try {
     await openRun();
     assert.ok(await clickOn('.rush-card[data-i="0"] .rush-res'));
     assert.equal((await dlg()).open, true);
-    await ev(`location.hash = '#/glossary'; 1`);
+    await ev(`location.hash = '#/settings'; 1`);
     await until(`document.querySelector('#view-rush').classList.contains('hidden')`, 'another page');
     await sleep(300);
     assert.equal((await dlg()).open, false, 'the dialog closed');
