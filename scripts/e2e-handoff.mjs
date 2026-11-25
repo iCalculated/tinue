@@ -3,7 +3,7 @@
 // DOMAIN, at http://localhost:<p+1>/) and headless Chrome with a local stand-in for PTN Ninja. Made-up players only.
 // Not part of npm test (it needs Chrome and public/syntaks/syntaks.wasm):  node --no-warnings scripts/e2e-handoff.mjs
 // Ports from $E2E_PORT (default 9761): old page, new page, API, the server behind it, DevTools. Temporary files under
-// $E2E_TMP, removed at the end. POST /api/handoff-token is answered by the proxy (the contract's answers).
+// $E2E_TMP, removed at the end. POST /api/handoff-token is the server's own.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -27,7 +27,7 @@ let n = 0; const step = (s) => console.log('ok', ++n, s);
 const boot = () => new Promise((res, rej) => {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('TINUE_')));
   const c = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server/server.js')], { stdio: ['ignore', 'pipe', 'inherit'],
-    env: { ...env, PORT: String(SRV), TINUE_DB: DB, TINUE_ACCESS_LOG: path.join(dir, 'access.log'), TINUE_SYNTAKS: '/nonexistent', TINUE_ORIGINS: [new URL(OLD).origin, new URL(NEW).origin].join() } });
+    env: { ...env, PORT: String(SRV), TINUE_DB: DB, TINUE_ACCESS_LOG: path.join(dir, 'access.log'), TINUE_SYNTAKS: '/nonexistent', TINUE_ORIGINS: [new URL(OLD).origin, new URL(NEW).origin].join(), TINUE_HANDOFF_ORIGIN: new URL(OLD).origin } });
   c.stdout.on('data', (d) => { if (String(d).includes('tinue on')) res(c); }); c.on('exit', (x) => rej(new Error('server exited ' + x))); kids.push(c);
 });
 let c = await boot(); c.kill(); await new Promise((r) => c.once('exit', r));
@@ -44,11 +44,7 @@ const proxy = http.createServer(async (req, res) => {
   if (down) return res.writeHead(502, { 'content-type': 'text/html' }).end('<h1>502</h1>');
   const o = req.headers.origin, cors = { 'access-control-allow-origin': o || '*', 'access-control-allow-credentials': 'true', 'access-control-allow-headers': 'content-type, authorization' };
   const json = (st, x) => res.writeHead(st, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(x));
-  if (req.method === 'POST' && req.url === '/api/handoff-token') {
-    if (o !== new URL(OLD).origin) return json(404, { error: 'not found' });
-    const t = /tinue_token=([a-f0-9]{48})/.exec(req.headers.cookie || '')?.[1];
-    return tokenMode === 'off' ? json(404, { error: 'not found' }) : t && !req.headers.authorization ? json(200, { token: t }) : json(401, { error: 'none' });
-  }
+  if (tokenMode === 'off' && req.url === '/api/handoff-token') return json(404, { error: 'not found' });
   if (req.method === 'POST' && req.url === '/api/rush/result') { const r = JSON.parse(body).run; if (rushRuns.includes(r)) return json(409, { error: 'run already posted' }); rushRuns.push(r); return json(200, { id: rushRuns.length, best: {} }); }
   const up = http.request({ host: '127.0.0.1', port: SRV, path: req.url, method: req.method, headers: req.headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
   up.on('error', () => res.destroy()); up.end(body);

@@ -21,6 +21,7 @@ for a in "$@"; do case "$a" in
   *) echo "ship: unknown option $a" >&2; exit 2 ;;
 esac; done
 . scripts/deploy-lib.sh
+[ -z "$PAGES" ] || export DOMAIN="${DOMAIN:-tinue.me}" # that checkout only takes the build for its own domain
 [ -n "$SITE" ] || { echo "ship: set SITE (SITE=\$HOME/Projects/site)" >&2; exit 2; }
 [ -n "$LEGACY" ] && [ -n "$TINUE_HOST" ] && { echo "ship: --legacy is crux's; unset TINUE_HOST" >&2; exit 2; }
 [ -n "$LEGACY" ] && [ -n "$PUZZLES" ] && { echo "ship: --legacy already re-imports every puzzle; drop --puzzles" >&2; exit 2; }
