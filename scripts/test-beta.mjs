@@ -24,7 +24,8 @@ test('puzzle addresses: a path with per-puzzle pages, the hash route without the
   assert.equal(at('/tinue-beta/', '?board=ninja', false)('pd 9'), '/tinue-beta/?board=ninja#/puzzle/pd%209');
   assert.equal(at('/tinue/', '', true)('p1'), '/tinue/puzzle/p1'); // only an explicit false turns the pages off
   // the address shown and the one compared with are the same function, so the page never loops rewriting it
-  assert.match(app, /const showPuzzleURL = \(id, s = 0\) => \{ if \(location\.pathname \+ location\.search \+ location\.hash !== puzzlePath\(id, s\)\) history\.replaceState\(null, '', puzzlePath\(id, s\)\); \};/);
+  assert.match(app, /const showPuzzleURL = \(id, s = 0\) => \{ if \(location\.pathname \+ location\.search \+ location\.hash !== puzzlePath\(id, s\)\) showURL\(puzzlePath\(id, s\)\); \};/);
+  assert.match(app, /const showURL = \(u\) => \{ history\.replaceState\(null, '', u\); pathShown = pathNow\(\); \};/);
 });
 
 test('a visit under a symmetry (a puzzle opened from a Rush run): #/puzzle/<id>/<s> on both builds; s = 0 as before', () => {

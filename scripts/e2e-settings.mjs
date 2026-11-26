@@ -507,6 +507,23 @@ try {
     await until(`!JSON.parse(localStorage.getItem('tinue.prefs')).ninja`, 'tinue felt again');
     step('the theme list: tinue felt, tinue classic and all 18 of PTN Ninja\'s; tinue classic typed by any of its names (classic alone: PTN Ninja\'s), Zen by name and a theme\'s code used; a short link answered in words');
   }
+  // Back and Forward between a puzzle's path and the hash pages (the path changes: popstate, no hashchange)
+  {
+    await cdp('Page.navigate', { url: BASE + '/' });
+    await until(`/^\\/puzzle\\//.test(location.pathname)`, 'a puzzle at its own path');
+    const puz = await ev('location.pathname'), shown = (v) => `!document.querySelector('#${v}').classList.contains('hidden')`;
+    for (const [hash, view] of [['#/settings', 'view-settings'], ['#/me', 'view-me'], ['#/leaderboard', 'view-leaderboard'], ['#/rush', 'view-rush']]) {
+      await ev(`(location.hash = '${hash}', true)`);
+      await until(`location.pathname === '/' && ${shown(view)}`, hash);
+      await ev('(history.back(), true)');
+      await until(`location.pathname === '${puz}' && ${shown('view-puzzle')}`, 'back from ' + hash);
+      await ev('(history.forward(), true)');
+      await until(`location.hash === '${hash}' && ${shown(view)}`, 'forward to ' + hash);
+      await ev('(history.back(), true)');
+      await until(`location.pathname === '${puz}' && ${shown('view-puzzle')}`, 'back again from ' + hash);
+    }
+    step('Back and Forward between the same puzzle and Settings, History, Leaderboard and Rush show the right page');
+  }
   if (errors.length) console.log('page errors:', errors);
   assert.deepEqual(errors.filter((e) => !/ptn\.ninja|ResizeObserver/i.test(e)), [], 'no page errors');
   console.log(`all ${n} steps passed`);

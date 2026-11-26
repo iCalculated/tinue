@@ -61,10 +61,13 @@ const APP = location.pathname.replace(/(puzzle\/[^/]+|glossary|me|leaderboard)\/
 // on both builds, #/puzzle/<id>/<s>: a per-puzzle page forwards to #/puzzle/<id> and would drop it.
 const STUBS = window.TINUE_STUBS !== false;
 const puzzlePath = (id, s = 0) => Number.isInteger(s) && s > 0 && s < 8 ? APP + location.search + '#/puzzle/' + encodeURIComponent(id) + '/' + s : STUBS ? APP + 'puzzle/' + encodeURIComponent(id) + location.search : APP + location.search + '#/puzzle/' + encodeURIComponent(id);
-const showPuzzleURL = (id, s = 0) => { if (location.pathname + location.search + location.hash !== puzzlePath(id, s)) history.replaceState(null, '', puzzlePath(id, s)); };
+const pathNow = () => location.pathname + location.search;
+let pathShown = pathNow(); // the address but for its hash, as last routed or written (see the popstate listener)
+const showURL = (u) => { history.replaceState(null, '', u); pathShown = pathNow(); };
+const showPuzzleURL = (id, s = 0) => { if (location.pathname + location.search + location.hash !== puzzlePath(id, s)) showURL(puzzlePath(id, s)); };
 // The symmetry of the visit on screen (0: the puzzle's own orientation).
 const symNow = (s = S) => s?.p?.sym || 0;
-const showHashURL = (h) => { if (location.pathname !== APP || location.hash !== h) history.replaceState(null, '', APP + location.search + h); };
+const showHashURL = (h) => { if (location.pathname !== APP || location.hash !== h) showURL(APP + location.search + h); };
 
 // Share (phones only): the system share sheet with the puzzle's own address (see above). On desktop the address bar
 // already shows that address, so there's no button (Shy, 2026-11-15).
@@ -2889,7 +2892,10 @@ async function route() {
   else if (S && !S.placeholder && S.status !== 'solved' && matchesFilters(S.p)) { restoreLeft(); showPuzzleURL(S.p.id, symNow()); } // back to the puzzle in progress
   else loadNext();
 }
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => { pathShown = pathNow(); route(); });
+// Back and Forward between a puzzle's path (/puzzle/<id>) and a hash page change the path, which sends popstate and no
+// hashchange (from Settings, Back changed the address and left Settings up). The same path: hashchange routes, if anything.
+window.addEventListener('popstate', () => { if (pathNow() !== pathShown) { pathShown = pathNow(); route(); } });
 
 (async () => {
   if (await window.TINUE_WAIT) return; // (tinue.me: the player is being brought from the old address, moved/import.js)
