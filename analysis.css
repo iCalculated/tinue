@@ -1,84 +1,156 @@
-/* The analysis view's engine lines (app.js engineMarkup, class .eng.ana), in the look of Gaelet's and PTN Ninja's
-   lists but with no panel of their own (Sasha, 2026-11-22: "i do not like the gray panel"): a header (the engine's
-   name small and quiet, the verdict large), a thin chance bar only for a chance, then rows on hairline rules, each an
-   evaluation chip filled in the colour of the side ahead, the line's numbered moves and its tags, then the threats.
-   Loaded only when the view is on (app.js ANALYSIS; scripts/build-static.sh copies it into every build), after
-   style.css, whose .moves .eng rules it overrides; production's engine row (.eng.row) never matches a rule here. */
-.moves .eng.ana { gap: 0; padding-bottom: 6px; }
-.moves .eng.ana .eng-h { display: flex; align-items: baseline; gap: 10px; min-height: 30px; }
-.moves .eng.ana .src { order: 0; margin: 0; font: 500 12px/1.2 "Noto Sans", -apple-system, sans-serif; color: var(--muted); }
-.moves .eng.ana .vd { margin-left: auto; font: 700 19px/1.25 "Noto Sans", -apple-system, sans-serif; letter-spacing: -.2px; color: var(--fg-hi);
-  font-variant-numeric: tabular-nums; white-space: nowrap; }
-.moves .eng.ana .vd .muted { font-weight: 600; }
-.moves .eng.ana .dots { margin-left: 1px; }
-/* White's chance, only when the verdict is a chance: the full width, thin, a tick at even */
-.moves .eng.ana .cbar { position: relative; display: block; height: 6px; margin: 3px 0 7px; border-radius: 3px; overflow: hidden; background: var(--p2);
-  box-shadow: inset 0 0 0 1px #6b655e; }
-.moves .eng.ana .cbar i { display: block; height: 100%; background: var(--p1); transition: width .3s ease; }
-.moves .eng.ana .cbar::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #6b655e; }
-/* the rows: full width, a hairline between them; the selected one a 2px accent bar at its left and the faintest tint.
-   The room is held for four rows and the threat line (three lines and one of yours); the rows scroll inside it past
-   that, and the threat line stays in sight below them, never scrolled away (app.js keeps the selected row in view).
-   The threat line: the Threats button (off by default, as on Lichess; x too), then the threats while it is pressed. The
-   line is there either way, at one height, so nothing above it moves when they come and go. */
-.moves .eng.ana .lns { display: flex; flex-direction: column; height: calc(4 * 36px + 23px); overflow: hidden; }
-.moves .eng.ana .lns > .rws { flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
-.moves .eng.ana .lns > .thr { flex: none; display: flex; align-items: center; gap: 8px; height: 18px; margin-top: 5px; min-width: 0; }
-.moves .eng.ana .thr .threat { flex: 0 1 auto; min-width: 0; height: auto; margin: 0; font-size: 12.5px; }
-/* the Threats button: a small quiet pill; pressed, in the threats' red */
-.moves .eng.ana .thr-t { flex: none; display: inline-flex; align-items: center; height: 18px; min-height: 0; padding: 0 8px; border: 1px solid var(--line);
-  border-radius: 9px; background: none; color: var(--muted); font: 600 11px/1 "Noto Sans", -apple-system, sans-serif; letter-spacing: .2px; white-space: nowrap; cursor: pointer; }
-.moves .eng.ana .thr-t:hover { color: var(--fg-hi); border-color: var(--muted); }
-.moves .eng.ana .thr-t[aria-pressed="true"] { color: var(--bad); border-color: var(--bad); background: rgba(236, 122, 116, .14); }
-.moves .eng.ana .ln { gap: 10px; min-height: 36px; padding: 0 6px 0 10px; border-radius: 0; background: none; }
-.moves .eng.ana .ln + .ln { border-top: 1px solid var(--line); }
-.moves .eng.ana .ln.sel { background: rgba(255, 255, 255, .04); box-shadow: inset 2px 0 0 var(--accent); }
-/* the evaluation: one width, so every line's moves start in one column; the colour of the side ahead */
-.moves .eng.ana .chip { flex: none; width: 74px; min-width: 0; height: 24px; padding: 0; border: 0; border-radius: 4px;
-  font: 700 12px/1 "Noto Sans", -apple-system, sans-serif; font-variant-numeric: tabular-nums; cursor: pointer; }
-.moves .eng.ana .s1 { background: var(--p1); color: #1f1d1a; }
-.moves .eng.ana .s2 { background: #0b0f0e; color: var(--p1); box-shadow: inset 0 0 0 1px #57534d; }
-.moves .eng.ana .s0 { background: var(--bg3); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
-.moves .eng.ana .pr { font-weight: 800; }
-.moves .eng.ana .chip:hover { filter: brightness(1.1); }
-/* the line: numbered as the move list is, plain moves (a spread's count and drops muted, its direction teal) */
-.moves .eng.ana .pvline { gap: 0; align-items: center; -webkit-mask-image: none; mask-image: none; }
-.moves .eng.ana .pvline.of { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
-.moves .eng.ana .mn { flex: none; margin: 0 1px 0 7px; font: 13px/1.3 var(--mono); color: var(--muted); }
-.moves .eng.ana .mn:first-child { margin-left: 0; }
-.moves .eng.ana .pvm { gap: 0; padding: 2px 3px; font: 13px/1.3 var(--mono); color: var(--fg-hi); }
-.moves .eng.ana .pvm:hover { background: rgba(127, 184, 58, .4); color: #fff; }
-.moves .eng.ana .pvm i { font-style: normal; }
-.moves .eng.ana .pvm .n { color: var(--muted); }
-.moves .eng.ana .pvm .d { color: #68c1cd; }
-.moves .eng.ana .pvm .k { font-weight: 700; }
-.moves .eng.ana .pvm:hover i { color: inherit; }
-/* tags: small words, no box */
-.moves .eng.ana .tag { padding: 0; background: none; font: 600 10px/1 "Noto Sans", -apple-system, sans-serif; letter-spacing: .6px; text-transform: uppercase; }
-.moves .eng.ana .tag.played { color: var(--muted); }
-@media (prefers-reduced-motion: reduce) { .moves .eng.ana .cbar i { transition: none; } }
-@media (pointer: coarse) {
-  .moves .eng.ana .ln { min-height: 44px; }
-  .moves .eng.ana .lns { height: calc(4 * 44px + 31px); }
-  .moves .eng.ana .lns > .thr, .moves .eng.ana .thr-t { height: 26px; }
-  .moves .eng.ana .thr-t { border-radius: 13px; }
-  .moves .eng.ana .chip { height: 28px; border-radius: 4px; }
+/* The analysis view (public/analysis-view.js; loaded only when the view is on, after style.css and board.css). No panel of
+   its own (Sasha, 2026-11-22: "i do not like the gray panel"): hairlines only. Every box has one size, whatever it holds,
+   so nothing moves as the engines think. Production never matches a rule here: each starts at .eng.ana, .ana-… or
+   .puzzle-page.ana-on, which only the view makes. */
+/* ---------- the header: switch, verdict, source, Threats ---------- */
+.eng.ana.ana { gap: 0; margin: -6px 0 0; padding: 0; border: 0; }
+.ana-h { position: relative; display: flex; align-items: center; gap: 8px; height: 44px; }
+.ana-h .vd { flex: none; width: 132px; font: 700 17px/1.25 "Noto Sans", -apple-system, sans-serif; letter-spacing: -.2px; color: var(--fg-hi); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ana-src, .ana-st { font: 500 12px/1.3 "Noto Sans", -apple-system, sans-serif; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ana-src { font-size: 11px; line-height: 16px; height: 16px; flex: 1 1 0; min-width: 0; text-align: right; }
+.ana-src .src.src, .ana-st .src.src { margin: 0; font: inherit; color: inherit; }
+.ana-src .link, .ana-st .link { padding: 0; font: inherit; color: var(--accent); }
+.puzzle-page.ana-on .ana-sw { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 30px; margin-left: -3px; padding: 0; border: 0; background: none; cursor: pointer; }
+.ana-sw i { position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--bg4); box-shadow: inset 0 0 0 1px var(--line); transition: background-color .15s; }
+.ana-sw i::after { content: ''; position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--fg); transition: transform .15s; }
+.ana-sw[aria-checked="true"] i { background: var(--good-fill); box-shadow: none; }
+.ana-sw[aria-checked="true"] i::after { transform: translateX(12px); background: #fff; }
+.puzzle-page.ana-on .thr-t { flex: none; display: inline-flex; align-items: center; justify-content: center; height: 22px; min-height: 0; padding: 0 8px; border: 1px solid var(--line); border-radius: 11px;
+  background: none; color: var(--muted); font: 600 11px/1 "Noto Sans", -apple-system, sans-serif; letter-spacing: .2px; white-space: nowrap; cursor: pointer; }
+@media (hover: hover) { .puzzle-page.ana-on .thr-t:hover:enabled { color: var(--fg-hi); border-color: var(--muted); } }
+.puzzle-page.ana-on .thr-t[aria-pressed="true"] { color: var(--bad); border-color: var(--bad); background: rgba(236, 122, 116, .14); }
+.puzzle-page.ana-on .thr-t:disabled { opacity: .45; cursor: default; }
+/* searching: a thin line along the header's foot, inside its height */
+.ana-prog { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; overflow: hidden; }
+.ana-prog.on::after { content: ''; position: absolute; inset: 0; background: var(--accent); opacity: .7; transform-origin: 0 0; animation: ana-prog 1.6s ease-in-out infinite; }
+@keyframes ana-prog { from { transform: translateX(-100%) scaleX(.5); } to { transform: translateX(100%) scaleX(.5); } }
+.ana-say { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* (a touched control answers with :active, not the browser's own slab) */
+.puzzle-page.ana-on .moves { -webkit-tap-highlight-color: transparent; }
+/* (the first result's chip comes a frame after the panel, beside the rating and under it: their room is kept) */
+@media (min-width: 861px) {
+  .puzzle-page.ana-on .session .rating-line { min-height: 30.75px; }
+  .puzzle-page.ana-on .session .streak { min-height: 22px; }
+  .puzzle-page.ana-on .session .streak:empty { display: flex; }
 }
-/* docked (phones): two-part chips [evaluation | move], the selected one ringed in the accent with its move on a dark
-   blue; under them the selected line's moves, the engine's name and the Threats button; then the threat line */
+/* ---------- the rows: always as many, one height, a hairline between them ---------- */
+.ana-rows { border-top: 1px solid var(--line); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-y; }
+.eng.ana .ana-row.ln { position: relative; display: flex; align-items: center; gap: 8px; height: 32px; min-height: 0; padding: 0 4px 0 6px; border-radius: 0; background: none; cursor: pointer; }
+.eng.ana .ana-row.ln + .ana-row { box-shadow: inset 0 1px 0 var(--line); }
+.eng.ana .ana-row.ln.empty { cursor: default; }
+.eng.ana .ana-row.ln.sel::before { content: ''; position: absolute; left: 0; top: 1px; bottom: 0; width: 2px; background: var(--accent); }
+.eng.ana .ana-row .chip { flex: none; width: 74px; min-width: 0; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; box-shadow: inset 0 0 0 1px var(--line);
+  font: 700 12px/1 "Noto Sans", -apple-system, sans-serif; font-variant-numeric: tabular-nums; cursor: pointer; opacity: 1; }
+.eng.ana .ana-row.empty .chip { opacity: .5; cursor: default; }
+.eng.ana .ana-row .chip.s1 { background: var(--p1); color: #1f1d1a; box-shadow: none; }
+.eng.ana .ana-row .chip.s2 { background: #0b0f0e; color: var(--p1); box-shadow: inset 0 0 0 1px #57534d; }
+.eng.ana .ana-row .chip.s0 { background: var(--bg3); color: var(--fg); }
+.eng.ana .ana-row .chip.pr { font-weight: 800; }
+@media (hover: hover) { .eng.ana .ana-row .chip:hover:enabled { filter: brightness(1.1); } }
+.eng.ana .ana-row.guess .chip, .eng.ana .ana-row.guess .pvline { opacity: .6; }
+.eng.ana .ana-row .pvline { flex: 1 1 0; gap: 0; align-items: center; min-height: 0; height: 28px; overflow: hidden; flex-wrap: nowrap;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); }
+.eng.ana .ana-row .mn { flex: none; margin: 0 1px 0 7px; font: 13px/1.3 var(--mono); color: var(--muted); white-space: nowrap; }
+.eng.ana .ana-row .mn:first-child { margin-left: 0; }
+.eng.ana .ana-row .pvm { flex: none; gap: 0; height: 28px; min-height: 0; padding: 0 3px; border: 0; font: 13px/1.3 var(--mono); color: var(--fg-hi); white-space: nowrap; }
+.eng.ana .ana-row [hidden], .ana-row[hidden] { display: none; }
+.eng.ana .ana-row .pvm:hover { background: none; } /* (style.css's: a finger leaves it on) */
+.eng.ana .ana-row .pvm.on, .eng.ana .ana-row .pvm:active { background: rgba(90, 167, 240, .3); color: #fff; }
+@media (hover: hover) { .eng.ana .ana-row .pvm:hover { background: rgba(90, 167, 240, .3); color: #fff; } .eng.ana .ana-row .pvm:hover i { color: inherit; } }
+.eng.ana .ana-row .pvm i { font-style: normal; }
+.eng.ana .ana-row .pvm .n { color: var(--muted); }
+.eng.ana .ana-row .pvm .d { color: #68c1cd; }
+.eng.ana .ana-row .pvm .k { font-weight: 700; }
+.eng.ana .ana-row .pvm.on i, .eng.ana .ana-row .pvm:active i { color: inherit; }
+.eng.ana .ana-row .tag { padding: 0 2px; background: none; font: 600 10px/1 "Noto Sans", -apple-system, sans-serif; letter-spacing: .6px; text-transform: uppercase; }
+.eng.ana .ana-row .chip[hidden] + .pvline { display: none; }
+.eng.ana .ana-row .ana-msg { font: 13px/1.3 "Noto Sans", -apple-system, sans-serif; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ana-row + .ana-row .ana-msg { color: var(--muted); }
+.eng.ana .ana-thr.threat { height: 22px; margin: 0; padding: 3px 0 0 6px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.eng.ana .ana-thr.none, .ana-st .none { color: var(--muted); }
+/* ---------- the move list: the step row's height and the way back's place always held ---------- */
+.puzzle-page.ana-on .mscroll { height: 240px; margin-top: 0; overflow-anchor: none; }
+.puzzle-page.ana-on .mtable .mcell { position: relative; padding-right: 20px; }
+.puzzle-page.ana-on .mtable .mv { overflow-wrap: normal; white-space: nowrap; }
+.puzzle-page.ana-on .mcell > .mv[data-v]::after { content: attr(data-v); position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font: 10px/1 "Noto Sans", -apple-system, sans-serif; text-decoration: none; color: var(--muted); opacity: .8; font-variant-numeric: tabular-nums; }
+.puzzle-page.ana-on .branch.ana-try { position: relative; margin: 0 0 4px 2.6em; padding: 3px 26px 3px 8px; border-top: 0; background: none; line-height: 1.9; }
+.ana-tok { white-space: nowrap; }
+.ana-tok .num { margin: 0 2px 0 2px; color: var(--muted); }
+.ana-par { color: var(--muted); }
+.puzzle-page.ana-on .ana-x { position: absolute; right: 0; top: 2px; width: 24px; height: 24px; padding: 0; color: var(--muted); font-size: 15px; text-decoration: none; }
+.puzzle-page.ana-on .ana-x:hover { color: var(--bad); }
+.puzzle-page.ana-on .moves .ana-back { flex: none; width: auto; height: auto; margin: 0 0 0 auto; padding: 4px 0; white-space: nowrap; }
+/* ---------- the gauge: White's share from the bottom (a Tak board has no White side: it never turns) ---------- */
+.ana-gauge { position: absolute; left: calc(100% + 6px); width: 12px; border-radius: 3px; overflow: hidden; background: var(--p2); box-shadow: 0 0 0 1px #4b4741; pointer-events: none; }
+.ana-gauge i, .ana-bar i { position: absolute; inset: 0; background: var(--p1); transform-origin: 50% 100%; transition: transform .3s ease, opacity .2s; }
+.ana-bar i { transform-origin: 0 50%; }
+.ana-gauge::after, .ana-bar::after { content: ''; position: absolute; inset: 0; background: linear-gradient(#6b655e, #6b655e) 0 25% / 100% 1px no-repeat, linear-gradient(#9a6a3a, #9a6a3a) 0 50% / 100% 2px no-repeat, linear-gradient(#6b655e, #6b655e) 0 75% / 100% 1px no-repeat; opacity: .8; }
+.ana-bar { display: none; position: relative; height: 4px; overflow: hidden; background: var(--p2); }
+.ana-bar::after { background: linear-gradient(#9a6a3a, #9a6a3a) 50% 0 / 2px 100% no-repeat; }
+/* ---------- the marks over the frame (board.css .tb-ov draws them; .tb's colours) ---------- */
+.ana-ov.ana-ov { --eng: #9fd0ff; --yours: #ffb36b; --threat: #ffa59c; --case: #121816; --p1b: #9a948a; --p2b: #5f6b67; left: 0; right: auto; bottom: auto; z-index: 1; opacity: .9; transition: none; }
+.ana-ov .alt .sf.sf, .ana-ov .alt .rg.rg { stroke-dasharray: none; }
+.puzzle-page.ana-on .board-wrap.pending .ana-ov, .puzzle-page.ana-on.lend .ana-ov, .puzzle-page.ana-on.lend .ana-gauge { visibility: hidden; }
+/* ---------- the preview, the keys ---------- */
+.ana-peek { position: fixed; z-index: 40; width: 208px; padding: 22px 4px 4px; border-radius: 6px; background: var(--bg2); box-shadow: 0 6px 22px rgba(0, 0, 0, .6), 0 0 0 1px var(--line); pointer-events: none; animation: ana-in .1s; }
+.ana-peek .rush-pic { overflow: visible; } /* (a tall stack on the last row stands out of it) */
+.ana-peek b { display: block; padding: 4px 2px 1px; font: 600 13px/1.2 var(--mono); color: var(--fg-hi); text-align: center; }
+@keyframes ana-in { from { opacity: 0; } }
+.ana-keys { max-width: 340px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--bg2); color: var(--fg); }
+.ana-keys h2 { margin: 0 0 10px; font-size: 16px; color: var(--fg-hi); }
+.ana-keys dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 14px; font-size: 13px; }
+.ana-keys dt { font: 600 13px/1.4 var(--mono); color: var(--fg-hi); }
+.ana-keys dd { margin: 0; }
+.ana-keys::backdrop { background: rgba(0, 0, 0, .5); }
+/* ---------- fingers; one column; the phone's dock ---------- */
+@media (pointer: coarse) {
+  .eng.ana:not(.docked) .ana-row.ln { height: 44px; }
+  .eng.ana:not(.docked) .ana-row .pvm { height: 40px; }
+  .eng.ana:not(.docked) .ana-row .pvline { height: 40px; }
+  .eng.ana:not(.docked) .ana-row .chip { height: 28px; }
+  .ana-h .thr-t.thr-t.thr-t { height: 32px; border-radius: 16px; }
+}
+@media (max-width: 860px) {
+  .ana-gauge { display: none; }
+  .ana-bar { display: block; border-radius: 2px; }
+  .puzzle-page.ana-on .mscroll { height: 180px; }
+}
+@media (max-width: 380px) { .ana-h .vd { font-size: 15px; width: 112px; } }
 @media (max-width: 860px) and (min-height: 561px) {
-  .moves .dock .eng.ana { gap: 4px; }
-  .moves .dock .eng.ana .chip { display: inline-flex; align-items: stretch; gap: 0; width: auto; height: 30px; padding: 0; border: 1px solid var(--line);
-    border-radius: 5px; overflow: hidden; background: var(--bg3); box-shadow: none; }
-  .moves .dock .eng.ana .chip .ev { display: flex; align-items: center; padding: 0 8px; font: 700 12px/1 "Noto Sans", -apple-system, sans-serif; box-shadow: none; }
-  .moves .dock .eng.ana .chip .mv { display: flex; align-items: center; padding: 0 9px; border-left: 1px solid var(--line); font: 600 13px/1 var(--mono); color: var(--fg-hi); }
-  .moves .dock .eng.ana .chip .mv i { font-style: normal; }
-  .moves .dock .eng.ana .chip .mv .n { color: var(--muted); }
-  .moves .dock .eng.ana .chip .mv .d { color: #68c1cd; }
-  .moves .dock .eng.ana .chip[aria-pressed="true"] { border-color: var(--accent); }
-  .moves .dock .eng.ana .chip[aria-pressed="true"] .mv { background: #22364d; }
-  .moves .dock .eng.ana .vd { margin: 0; font-size: 15px; }
-  .moves .dock .eng.ana .eng-b .src { margin-left: auto; font-size: 11px; }
-  .moves .dock .eng.ana .threat { margin: 0; }
-  .moves .dock .eng.ana .thr-t { height: 28px; padding: 0 11px; border-radius: 14px; font-size: 12px; }
+  .puzzle-page.ana-on .moves .dock.ana-dock { gap: 4px; padding-top: 8px; border-top: 0; }
+  .ana-dock .ana-bar { position: absolute; left: 0; right: 0; top: 0; border-radius: 0; }
+  .puzzle-page.ana-on .ana-res { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-rows: 20px 18px; gap: 0 10px; align-items: center; height: 38px; }
+  .ana-head { display: contents; }
+  .ana-res .icon { grid-row: 1 / 3; }
+  .ana-res b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 20px; }
+  .puzzle-page.ana-on .ana-res .ana-st { grid-column: 2; grid-row: 2; font-size: 11px; line-height: 16px; color: var(--muted); }
+  .puzzle-page.ana-on .ana-res .ana-st.open { align-self: end; z-index: 2; padding: 6px 8px; margin: 0 -8px -6px; border-radius: 6px; background: var(--bg3); white-space: normal; }
+  .ana-st .threat.threat { display: inline; margin: 0; color: var(--bad); font: inherit; }
+  .ana-res button { grid-column: 3; grid-row: 1 / 3; }
+  .puzzle-page.ana-on .moves .dock .eng-slot { height: 65px; }
+  .eng.ana.ana.docked { margin: 0; }
+  .eng.ana.docked .ana-row.ln { padding: 0; }
+  .eng.ana.docked .ana-row .chip { width: 66px; }
+  .eng.ana.docked .ana-row.ln.sel::before { left: -12px; }
+  .eng.ana.docked .ana-row .pvm { height: 32px; }
+  .eng.ana.docked .ana-row .pvline { height: 32px; }
+  .ana-tape { display: flex; align-items: center; height: 29px; border-top: 1px solid var(--line); }
+  .ana-strip { flex: 1 1 0; min-width: 0; overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; font: 13px/28px var(--mono); color: var(--fg); }
+  .ana-strip::-webkit-scrollbar { display: none; }
+  .ana-strip .mv { display: inline-block; padding: 0 4px; border-radius: 3px; line-height: 22px; cursor: pointer; }
+  .ana-strip .mv.past { color: #8f8c87; }
+  .ana-strip .mv.me, .ana-strip .mv.opp { color: var(--fg-hi); font-weight: 600; }
+  .ana-strip .mv.me.ok { color: var(--good); }
+  .ana-strip .mv.cur.cur { background: var(--btn); color: #fff; }
+  .ana-strip .mv[data-v]::after { content: none; }
+  .puzzle-page.ana-on .moves .ana-tape .ana-back { width: 72px; margin: 0; font-size: 12px; text-align: right; }
+  .puzzle-page.ana-on .moves .dock .nav { grid-template-columns: repeat(4, 1fr) 44px 44px; gap: 6px; }
+  .puzzle-page.ana-on .moves .dock .nav .ana-sw { width: auto; margin: 0; border: 1px solid var(--line); background: var(--bg3); border-radius: var(--r-ctl); }
+  .puzzle-page.ana-on .moves .dock .nav .thr-t { height: 40px; border-radius: var(--r-ctl); background: var(--bg3); font-size: 17px; }
+  .puzzle-page.ana-on .moves .dock .nav .thr-t[aria-pressed="true"] { background: rgba(236, 122, 116, .2); }
+  .ana-peek { width: 168px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ana-gauge i, .ana-bar i, .ana-sw i, .ana-sw i::after { transition: none; }
+  .ana-prog.on::after, .ana-peek { animation: none; }
 }
