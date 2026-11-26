@@ -362,6 +362,95 @@ try {
   assert.equal(quiet.proc.exitCode, null);
 } finally { quiet.proc.kill(); }
 
+// ---- percentile feedback: the page's own maths, cut out of index.html between its markers ----
+{
+  const html = fs.readFileSync(path.join(HERE, 'players-live', 'index.html'), 'utf8');
+  const src = html.split('/* pf:begin */')[1]?.split('/* pf:end */')[0];
+  assert.ok(src, 'the maths is between its markers');
+  const PF = new Function(`${src}; return PF;`)();
+  const tz = process.env.TZ, H = 36e5;
+  const row = (t, player = 'a', win = 1) => ({ t: +t, player, win });
+  const day = (d, hh = 0, mm = 0, mo = 5) => +new Date(2026, mo, d, hh, mm);
+  const deep = (m) => JSON.stringify({ c: m.clock, t: m.today, p: m.past });
+  try {
+    process.env.TZ = 'America/Los_Angeles';
+    assert.equal(new Date(2026, 0, 1).getTimezoneOffset(), 480, 'the zone took');
+    // rank: ties half; median
+    assert.equal(PF.rank([1, 2, 3, 4], 3), 62.5); assert.equal(PF.rank([0, 0], 0), 50); assert.equal(PF.rank([], 1), null); assert.equal(PF.rank([1], null), null);
+    assert.equal(PF.median([3, 1, 2]), 2); assert.equal(PF.median([4, 1]), 2.5); assert.equal(PF.median([]), null);
+    // empty data
+    let m = PF.days([], day(10, 12));
+    assert.equal(m.past.length, 0);
+    assert.deepEqual(PF.at(m, 'attempts', m.clock), { value: 0, days: 0, median: null, pr: null });
+    assert.equal(PF.at(m, 'solved', m.clock).value, null); assert.deepEqual(PF.cloud(m.past, 'attempts'), []);
+    // only today; then the first, partial day is never compared with
+    assert.equal(PF.days([row(day(10, 9))], day(10, 12)).past.length, 0);
+    assert.equal(PF.days([row(day(9, 9)), row(day(10, 9))], day(10, 12)).past.length, 0);
+    assert.equal(PF.days([row(day(8, 9)), row(day(10, 9))], day(10, 12)).past.length, 1, 'a day nobody played is a day');
+    // seven whole days, day i with i attempts at 09:00 (all missed but the first) and one at 20:00; day 5 empty
+    const rows = [row(day(1, 9), 'z')];
+    for (let i = 2; i <= 8; i++) if (i !== 5) { for (let j = 0; j < i; j++) rows.push(row(day(i, 9, j), `p${j}`, j ? 0 : 1)); rows.push(row(day(i, 20), 'late')); }
+    for (let j = 0; j < 5; j++) rows.push(row(day(9, 10, j), j ? 'p0' : 'new', j % 2));
+    rows.push(row(day(9, 18), 'future'));
+    m = PF.days(rows, day(9, 12));
+    let q = PF.at(m, 'attempts', m.clock);
+    // past by noon: 2 3 4 0 6 7 8; today 5 beats 4 of 7
+    assert.equal(q.value, 5, 'a row ahead of now is not counted'); assert.equal(q.days, 7); assert.equal(q.median, 4); assert.equal(q.pr, 400 / 7);
+    q = PF.at(m, 'solved', m.clock);
+    assert.equal(q.value, 0.4); assert.equal(q.days, 6, 'an empty day has no solved share'); // 1/2 1/3 1/4 1/6 1/7 1/8
+    assert.equal(q.pr, 500 / 6);
+    q = PF.at(m, 'players', m.clock); assert.equal(q.value, 2); assert.equal(q.pr, 150 / 7, 'a tie counts half');
+    q = PF.at(m, 'fresh', m.clock); assert.equal(q.value, 1); // past: p0 p1 | p2 | p3 | 0 | p4 p5 | p6 | p7
+    assert.equal(q.pr, (100 * (1 + 4 / 2)) / 7);
+    // earlier in the day; solved is withheld until five attempts, counts are not
+    assert.equal(PF.at(m, 'attempts', 9.5 * H).value, 0); assert.equal(PF.at(m, 'attempts', 9.5 * H).pr, 100 * 0.5 / 7);
+    assert.equal(PF.at(m, 'solved', 9.5 * H).value, null);
+    assert.equal(PF.at(m, 'solved', 10 * H + 3 * 6e4).pr, null); assert.equal(PF.at(m, 'solved', 10 * H + 4 * 6e4).pr, 500 / 6);
+    // the solved share can fall
+    assert.ok(m.today.solved.v[1] > m.today.solved.v[2]);
+    // at a step's own moment it counts; a moment before it does not
+    assert.equal(PF.valueAt(m.past[0].attempts, 9 * H), 1); assert.equal(PF.valueAt(m.past[0].attempts, 9 * H - 1), 0);
+    // four days are too few; five are enough
+    for (const [n, some] of [[4, false], [5, true]]) {
+      const mm = PF.days([row(day(1, 9)), row(day(2 + n, 8))], day(2 + n, 12));
+      assert.equal(mm.past.length, n); assert.equal(PF.at(mm, 'attempts', mm.clock).pr != null, some);
+    }
+    // the cloud: the same every time, bounded, inside the day, on the lines
+    assert.deepEqual(PF.cloud(m.past, 'attempts'), PF.cloud(PF.days(rows, day(9, 13)).past, 'attempts'));
+    for (const n of [7, 200, 1000]) {
+      const past = Array.from({ length: n }, (_, i) => ({ ...m.past[0], t0: day(1) + i * 864e5 }));
+      const c = PF.cloud(past, 'attempts');
+      assert.ok(c.length <= 360 && c.length >= 150, `${n} days: ${c.length} dots`);
+      assert.ok(c.every((d) => d.c >= 0 && d.c < PF.DAY && d.v === PF.valueAt(m.past[0].attempts, d.c)));
+      assert.ok(new Set(c.map((d) => Math.round(d.c / 6e5))).size > 60, 'spread over the clock');
+    }
+    // DST: spring forward 2026-03-08 (23 h), back 2026-11-01 (25 h)
+    const spring = PF.days([row(day(6, 9, 0, 2)), row(day(8, 1, 30, 2)), row(day(8, 3, 30, 2)), row(day(8, 9, 0, 2)), row(day(8, 23, 59, 2))], day(9, 9, 0, 2));
+    assert.deepEqual(spring.past.map((d) => (d.t1 - d.t0) / H), [24, 23]);
+    assert.deepEqual(spring.past[1].attempts.c.map((c) => c / H), [1.5, 3.5, 9, 23 + 59 / 60]);
+    assert.equal(PF.valueAt(spring.past[1].attempts, 2.5 * H), 1, 'inside the skipped hour'); assert.equal(PF.valueAt(spring.past[1].attempts, spring.clock), 3);
+    const n1 = day(1, 0, 0, 10), fall = PF.days([row(day(30, 9, 0, 9)), row(n1 + 1.25 * H), row(n1 + 1.75 * H), row(n1 + 2.1 * H), row(n1 + 2.9 * H), row(n1 + 3 * H), row(n1 + 10 * H)], day(2, 9, 0, 10));
+    assert.equal((fall.past[1].t1 - fall.past[1].t0) / H, 25);
+    assert.deepEqual(fall.past[1].attempts.c.map((c) => c / H), [1.25, 1.75, 2, 2, 2, 9], 'the second 1 o’clock is held at 2:00');
+    assert.equal(PF.valueAt(fall.past[1].attempts, 9 * H), 6);
+    for (const [mo, d] of [[2, 8], [10, 1]]) { // today on a clock-change day: never runs backwards, all of the day so far counted
+      let last = -1;
+      const t0 = day(d, 0, 0, mo), xs = [];
+      for (let k = 0; k < 90; k++) { xs.push(row(t0 + k * 15 * 6e4)); if (xs.at(-1).t >= PF.dayStart(t0, 1)) break; const mm = PF.days(xs, xs.at(-1).t); assert.ok(mm.clock >= last); last = mm.clock; assert.equal(PF.at(mm, 'attempts', mm.clock).value, xs.length); }
+    }
+    process.env.TZ = 'America/Sao_Paulo'; // put forward at midnight: the day starts at 01:00
+    const sp = PF.days([row(new Date(2018, 10, 2, 9)), row(new Date(2018, 10, 4, 1, 30)), row(new Date(2018, 10, 4, 9))], +new Date(2018, 10, 5, 9));
+    assert.deepEqual(sp.past.map((d) => (d.t1 - d.t0) / H), [24, 23]); assert.deepEqual(sp.past[1].attempts.c.map((c) => c / H), [1.5, 9]);
+    // 20k rows over 400 days, quickly
+    process.env.TZ = 'America/Los_Angeles';
+    const many = []; for (let i = 0; i < 20000; i++) many.push(row(day(1) - 400 * 864e5 + i * 400 * 864 * 5 - 0, `p${i % 300}`, i % 2));
+    const began = performance.now(), big = PF.days(many, day(2, 12)); for (const k of PF.KEYS) { PF.at(big, k, big.clock); PF.cloud(big.past, k); }
+    assert.ok(performance.now() - began < 1000, 'quick on 20k rows'); assert.ok(big.past.length >= 399);
+    assert.equal(deep(PF.days(rows, day(9, 12))), deep(m), 'pure');
+  } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }
+  assert.doesNotMatch(html, /innerHTML|insertAdjacentHTML|outerHTML|<script[^>]+src=/, 'textContent only, one inline script');
+}
+
 console.log('ok players-live: odd and malformed requests answered without crashing; 304/ETag, gzip q=0, in-place edits (re-rate, theme, grade, same-length rename, attempt edit) detected, generic 500; /rush.json labels, shape, own ETag, latest 200 runs; held snapshot, safety headers, quiet failures');
 } finally {
   try { w?.close(); } catch {}

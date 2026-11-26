@@ -49,8 +49,21 @@
   .note { font-size: 12px; color: var(--muted); margin: 8px 0 0; max-width: 78ch; }
 
   /* today */
-  #today { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 32px; align-items: start; }
-  .stats { display: grid; grid-template-columns: repeat(4, max-content); gap: 10px 28px; }
+  #today { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 24px; }
+  .stat { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; column-gap: 8px; }
+  .stat .lbl { grid-column: 1 / -1; }
+  /* percentile feedback: today's line over a cloud of earlier days */
+  .stat .pr { min-height: 37px; text-align: right; white-space: nowrap; line-height: 1.2; }
+  .stat .pr strong { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); }
+  .stat .pr span { display: block; font-size: 11px; }
+  .pf { position: relative; grid-column: 1 / -1; align-self: end; margin-top: 4px; }
+  .pf svg { display: block; width: 100%; touch-action: pan-y; }
+  .pf svg text { font-size: 10px; }
+  .pf .past { fill: var(--muted); fill-opacity: .22; } /* each dot, so a crowd is darker */
+  .pf .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .pf .end { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
+  .pf .cross { stroke: var(--faint); } .pf svg * { pointer-events: none; } /* the svg itself takes the pointer, so a redraw under it keeps the hover */
   .stat b { display: block; font-size: 26px; font-weight: 500; line-height: 1.1; letter-spacing: -.02em; }
   .stat span { font-size: 12px; color: var(--muted); }
   .now h2 { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
@@ -61,7 +74,7 @@
   .res { letter-spacing: 1px; font-size: 12px; }
   .ok { color: var(--ok); } .bad { color: var(--bad); } .rf, .d.rf { color: var(--refund); } .d.gone { text-decoration: line-through; }
   i.rf { font-style: normal; font-size: 11.5px; margin-left: 4px; } p.rf-note { color: var(--fg); margin-bottom: 0; }
-  @media (max-width: 720px) { #today { grid-template-columns: minmax(0, 1fr); } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat b { font-size: 22px; } }
+  @media (max-width: 720px) { #today { grid-template-columns: minmax(0, 1fr); } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; } .stat b { font-size: 22px; } .stat .pr strong { font-size: 18px; } }
 
   /* controls */
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
@@ -396,7 +409,7 @@ function players(rows, t0) {
 }
 
 // ---------- today ----------
-function renderToday(ps) {
+function renderStats(ps) {
   // yesterday = the calendar day before, up to the same clock time, so a partial today meets a partial yesterday
   const now = Date.now(), t0 = midnight(), rows = state.rows;
   const back = (t) => { const d = new Date(t); d.setDate(d.getDate() - 1); return +d; };
@@ -405,12 +418,15 @@ function renderToday(ps) {
     return { n: rs.length, solve: rs.length ? rs.reduce((x, r) => x + r.win, 0) / rs.length : null, players: who.size,
       fresh: ps.filter((p) => p.first >= a && p.first < b).length }; };
   const td = day(t0, now + 1), yd = day(y0, y1 + 1);
-  const stat = (big, label) => h('div', { class: 'stat' }, [h('b', { text: big }), h('span', { text: label })]);
-  $('#stats').replaceChildren(
-    stat(String(td.n), `${td.n === 1 ? 'attempt' : 'attempts'} today · ${yd.n} yesterday by now`),
-    stat(td.solve == null ? '–' : pct(td.solve), `solved · ${yd.solve == null ? '–' : pct(yd.solve)} yesterday by now`),
-    stat(String(td.players), `${td.players === 1 ? 'player' : 'players'} · ${yd.players} yesterday by now`),
-    stat(String(td.fresh), `new ${td.fresh === 1 ? 'player' : 'players'} · ${yd.fresh} yesterday by now`));
+  const put = (k, big, label) => { const f = figs.get(k); f.big.textContent = big; f.lbl.textContent = label; };
+  put('attempts', String(td.n), `${td.n === 1 ? 'attempt' : 'attempts'} today · ${yd.n} yesterday by now`);
+  put('solved', td.solve == null ? '–' : pct(td.solve), `solved · ${yd.solve == null ? '–' : pct(yd.solve)} yesterday by now`);
+  put('players', String(td.players), `${td.players === 1 ? 'player' : 'players'} · ${yd.players} yesterday by now`);
+  put('fresh', String(td.fresh), `new ${td.fresh === 1 ? 'player' : 'players'} · ${yd.fresh} yesterday by now`);
+  renderPf(now);
+}
+function renderNow(ps) {
+  const now = Date.now(), rows = state.rows;
   const live = ps.filter((p) => now - p.last < 15 * MIN).sort((a, b) => b.last - a.last);
   const ul = $('#now');
   if (!live.length) {
@@ -425,6 +441,188 @@ function renderToday(ps) {
     h('span', { class: 'faint', text: p.dToday ? sgn(p.dToday) : '±0' }),
     h('span', { class: 'res', 'aria-label': 'last results' }, p.rs.slice(-6).map((r) => h('span', { class: r.win ? 'ok' : 'bad', text: r.win ? '✓' : '✗' }))),
   ]))));
+}
+
+// ---------- percentile feedback ----------
+// Today so far against every earlier whole day at the same clock time (Seth Roberts's percentile feedback).
+// Pure maths, with no DOM: scripts/test-players-live.mjs runs what is between the two markers.
+/* pf:begin */
+const PF = (() => {
+  const DAY = 864e5, KEYS = ['attempts', 'solved', 'players', 'fresh'];
+  const MIN_DAYS = 5; // fewer earlier days than this: no percentile
+  const MIN_TRIES = 5; // fewer attempts so far today: no percentile for the solved share
+  const dayStart = (t, plus = 0) => { const d = new Date(t); return +new Date(d.getFullYear(), d.getMonth(), d.getDate() + plus); };
+  const wall = (t) => { const d = new Date(t); return ((d.getHours() * 60 + d.getMinutes()) * 60 + d.getSeconds()) * 1000 + d.getMilliseconds(); };
+  // Clock time of t within the day [t0, t1), never running backwards. On an ordinary day it is the time since midnight.
+  // A skipped hour is simply jumped; an hour that comes twice counts once, its second pass held at the clock's turn.
+  function clockOf(t, t0, t1) {
+    if (t1 - t0 === DAY) return t - t0;
+    const c = wall(t), first = t0 + c; // where this clock time falls if the clock has not been put back
+    if (first >= t || wall(first) !== c) return c;
+    let lo = first, hi = t; // put back somewhere in (lo, hi]
+    const off = new Date(lo).getTimezoneOffset();
+    if (new Date(hi).getTimezoneOffset() === off) return c;
+    while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (new Date(mid).getTimezoneOffset() === off) lo = mid; else hi = mid; }
+    return Math.max(c, hi - t0);
+  }
+  // Each stat of one day as a step line: value v[i] from clock c[i] on. before: the value ahead of the first step.
+  function newDay(t0) {
+    const line = (before) => ({ before, c: [], v: [] });
+    return { t0, t1: dayStart(t0, 1), who: new Set(), attempts: line(0), solved: line(null), players: line(0), fresh: line(0) };
+  }
+  function add(day, r, fresh, won) {
+    const c = clockOf(r.t, day.t0, day.t1), step = (k, v) => { day[k].c.push(c); day[k].v.push(v); };
+    const n = day.attempts.c.length + 1;
+    step('attempts', n);
+    day.wins = (day.wins || 0) + won;
+    step('solved', day.wins / n);
+    if (!day.who.has(r.player)) { day.who.add(r.player); step('players', day.who.size); }
+    if (fresh) step('fresh', day.fresh.c.length + 1);
+  }
+  // rows (oldest first) -> today, and every whole local day before it. The day of the first row is left out: the data
+  // starts part-way through it. A day nobody played is a day too.
+  function days(rows, now) {
+    const t0 = dayStart(now), today = newDay(t0), past = [], at = new Map(), seen = new Set();
+    if (rows.length) for (let d = dayStart(rows[0].t, 1); d < t0; d = dayStart(d, 1)) { const day = newDay(d); past.push(day); at.set(d, day); }
+    let cur = null; // the day of the last row, so a run of rows on one day costs one Date
+    for (const r of rows) {
+      const fresh = !seen.has(r.player);
+      seen.add(r.player);
+      if (r.t > now) continue;
+      if (!cur || r.t < cur.t0 || r.t >= cur.t1) { const d = dayStart(r.t); cur = d === t0 ? today : at.get(d) || { t0: d, t1: dayStart(d, 1), skip: true }; }
+      if (!cur.skip) add(cur, r, fresh, r.win ? 1 : 0);
+    }
+    return { today, past, clock: clockOf(now, t0, today.t1) };
+  }
+  function valueAt(line, c) { // the last step at or before c
+    let lo = 0, hi = line.c.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (line.c[m] <= c) lo = m + 1; else hi = m; }
+    return lo ? line.v[lo - 1] : line.before;
+  }
+  const pastAt = (past, k, c) => past.map((d) => valueAt(d[k], c)).filter((v) => v != null);
+  function rank(vals, v) { // % of vals below v, a tie counting half
+    if (!vals.length || v == null) return null;
+    let below = 0;
+    for (const x of vals) below += x < v ? 1 : x === v ? 0.5 : 0;
+    return (100 * below) / vals.length;
+  }
+  function median(vals) {
+    if (!vals.length) return null;
+    const a = vals.slice().sort((x, y) => x - y), m = a.length >> 1;
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  }
+  // stat k at clock c: today's value, its percentile (null when there is too little to say), how many days, their median
+  function at(m, k, c) {
+    const vals = pastAt(m.past, k, c), value = valueAt(m.today[k], c);
+    const enough = vals.length >= MIN_DAYS && (k !== 'solved' || valueAt(m.today.attempts, c) >= MIN_TRIES);
+    return { value, days: vals.length, median: median(vals), pr: enough ? rank(vals, value) : null };
+  }
+  const hash = (a, b) => { // 0..1, the same every time for the same day and place
+    let x = (Math.imul(Math.floor(a / 6e4) | 0, 0x9e3779b1) ^ Math.imul(b + 1, 0x85ebca6b)) >>> 0;
+    x = Math.imul(x ^ (x >>> 15), 0x2c1b3c6d); x = Math.imul(x ^ (x >>> 12), 0x297a2d39);
+    return ((x ^ (x >>> 15)) >>> 0) / 2 ** 32;
+  };
+  // About max dots off the earlier days' lines: each day gives the same number, one in each equal slice of the clock at
+  // a place set by its date, so nothing moves between polls.
+  function cloud(past, k, max = 360) {
+    const per = Math.max(1, Math.min(24, Math.floor(max / (past.length || 1)))), every = Math.ceil(past.length / max), out = [];
+    past.forEach((d, j) => {
+      if (j % every) return;
+      for (let i = 0; i < per; i++) {
+        const c = ((i + hash(d.t0, i)) / per) * DAY, v = valueAt(d[k], c);
+        if (v != null) out.push({ c, v });
+      }
+    });
+    return out;
+  }
+  return { DAY, KEYS, MIN_DAYS, MIN_TRIES, dayStart, clockOf, days, valueAt, rank, median, at, hash, cloud };
+})();
+/* pf:end */
+
+// The four figures are built once and refilled, so a poll drops neither the focus nor the hover.
+const NAMES = { attempts: 'attempts', solved: 'solved', players: 'players', fresh: 'new players' };
+const figs = new Map(PF.KEYS.map((k) => {
+  const f = { k, big: h('b'), pr: h('div', { class: 'pr' }), lbl: h('span', { class: 'lbl' }), pos: null };
+  f.tip = h('div', { class: 'tip', role: 'status' });
+  f.svg = s('svg', { role: 'img', tabindex: 0 });
+  f.box = h('div', { class: 'pf' }, [f.svg, f.tip]);
+  const hide = () => { f.pos = null; point(f); };
+  const at = (ev) => {
+    for (const g of figs.values()) if (g !== f && g.pos != null) { g.pos = null; point(g); }
+    if (f.view) { f.pos = f.view.x.inv(ev.clientX - f.svg.getBoundingClientRect().left); point(f); }
+  };
+  f.svg.addEventListener('pointermove', at);
+  f.svg.addEventListener('pointerdown', at);
+  f.svg.addEventListener('pointerleave', (ev) => { if (ev.pointerType !== 'touch') hide(); }); // a tap's reading stays up
+  f.svg.addEventListener('pointercancel', hide);
+  f.svg.addEventListener('mousedown', (ev) => ev.preventDefault()); // a click or tap reads a time; only Tab takes the focus
+  f.svg.addEventListener('blur', hide);
+  f.svg.addEventListener('keydown', (ev) => { // arrows step a quarter of an hour
+    const d = { ArrowLeft: -1, ArrowRight: 1 }[ev.key];
+    if (ev.key === 'Escape') return hide();
+    if (!d || !f.view) return;
+    ev.preventDefault();
+    f.pos = f.pos == null ? f.view.m.clock : Math.max(0, Math.min(PF.DAY, f.pos + d * 15 * MIN));
+    point(f);
+  });
+  $('#stats').append(h('div', { class: 'stat' }, [f.big, f.pr, f.lbl, f.box]));
+  return [k, f];
+}));
+document.addEventListener('pointerdown', (ev) => { for (const f of figs.values()) if (f.pos != null && !f.svg.contains(ev.target)) { f.pos = null; point(f); } });
+
+const pfFmt = (k, v) => (v == null ? '–' : k === 'solved' ? pct(v) : String(+v.toFixed(1)));
+const pfClock = (c) => new Date(2001, 0, 1, 0, 0, Math.floor(Math.min(c, PF.DAY - 1) / 1000)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function renderPf(now) {
+  const m = PF.days(state.rows, now);
+  for (const f of figs.values()) drawPf(f, m);
+}
+function drawPf(f, m) {
+  const { k, svg } = f, q = PF.at(m, k, m.clock), today = m.today[k];
+  const of = pl(q.days, 'day');
+  f.pr.replaceChildren(...(q.pr == null ? [] : [h('strong', { text: `PR ${R(q.pr)}` })]),
+    ...(q.days ? [h('span', { class: 'muted', text: q.pr == null ? pl(q.days, 'past day') : `vs ${of}` })] : []));
+  f.pr.title = q.pr == null ? '' : `Beats ${R(q.pr)}% of ${of} at this time of day (a tie counts half)`;
+  svg.setAttribute('aria-label', `${NAMES[k]} today so far ${pfFmt(k, q.value)}${q.median == null ? '' : `, past median by now ${pfFmt(k, q.median)}`}${q.pr == null ? '' : `, percentile ${R(q.pr)} of ${of}`}. Left and right arrows read other times.`);
+  const W = Math.max(120, f.box.clientWidth), H = W < 220 ? 92 : 112, mg = { t: 6, r: 5, b: 16, l: k === 'solved' ? 32 : 26 };
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H);
+  const dots = PF.cloud(m.past, k);
+  let top = 0;
+  for (const d of dots) top = Math.max(top, d.v);
+  for (const v of today.v) top = Math.max(top, v);
+  const yt = k === 'solved' ? { hi: 1, ticks: [0, 0.5, 1] } : nice(0, Math.max(top, 2), 3);
+  const ticks = yt.ticks.filter((v) => k === 'solved' || Number.isInteger(v));
+  const x = lin(0, PF.DAY, mg.l, W - mg.r), y = lin(0, yt.hi, H - mg.b, mg.t);
+  svg.replaceChildren();
+  yGrid(svg, y, ticks, mg.l, W - mg.r, (v) => (k === 'solved' ? pct(v) : String(v)));
+  for (const hr of W < 220 ? [6, 18] : [6, 12, 18]) svg.append(s('text', { x: x(hr * HOUR), y: H - 4, 'text-anchor': 'middle', text: new Date(2001, 0, 1, hr).toLocaleTimeString([], { hour: 'numeric' }) }));
+  const g = s('g', { class: 'past' });
+  for (const d of dots) g.append(s('circle', { cx: x(d.c).toFixed(1), cy: y(d.v).toFixed(1), r: W < 220 ? 1.75 : 2.25 }));
+  svg.append(g);
+  if (q.value != null) {
+    let d = today.before == null ? '' : `M${x(0)},${y(today.before).toFixed(1)}`;
+    today.c.forEach((c, i) => { const px = x(c).toFixed(1), py = y(today.v[i]).toFixed(1); d += d ? `H${px}V${py}` : `M${px},${py}`; });
+    svg.append(s('path', { class: 'ln', d: `${d}H${x(m.clock).toFixed(1)}` }));
+    svg.append(s('circle', { class: 'end', cx: x(m.clock), cy: y(q.value), r: 4 }));
+  }
+  f.cross = s('line', { class: 'cross', y1: mg.t, y2: H - mg.b, opacity: 0 });
+  f.ring = s('circle', { class: 'hov', r: 5, opacity: 0 });
+  svg.append(f.cross, f.ring);
+  f.view = { m, x, y, W };
+  point(f);
+}
+function point(f) { // the reading under the pointer (f.pos is a clock time), or none
+  const show = f.pos != null && f.view;
+  f.tip.style.opacity = show ? 1 : 0;
+  if (f.cross) for (const e of [f.cross, f.ring]) e.setAttribute('opacity', 0);
+  if (!show) { f.said = ''; return; }
+  const { m, x, y } = f.view, c = Math.max(0, Math.min(PF.DAY, f.pos)), later = c > m.clock, q = PF.at(m, f.k, c);
+  f.cross.setAttribute('x1', x(c)); f.cross.setAttribute('x2', x(c)); f.cross.setAttribute('opacity', 1);
+  if (!later && q.value != null) { f.ring.setAttribute('cx', x(c)); f.ring.setAttribute('cy', y(q.value)); f.ring.setAttribute('opacity', 1); }
+  const lines = [pfClock(c), later ? null : `today ${pfFmt(f.k, q.value)}${q.pr == null ? '' : ` · PR ${R(q.pr)}`}`, q.median == null ? null : `past median ${pfFmt(f.k, q.median)}`].filter(Boolean);
+  if (lines.join('|') !== f.said) { f.said = lines.join('|'); f.tip.replaceChildren(...lines.map((t, i) => h('div', { class: i === 1 && !later ? null : 'muted', text: t }))); }
+  const tw = f.tip.offsetWidth, bw = f.box.clientWidth, px = x(c);
+  f.tip.style.left = `${Math.max(0, Math.min(px + 12 + tw > bw ? px - 12 - tw : px + 12, bw - tw))}px`;
+  f.tip.style.top = `${-f.tip.offsetHeight + 4}px`;
 }
 
 // ---------- rating over time ----------
@@ -1419,7 +1617,8 @@ function render(clockOnly) { // clockOnly: the once-a-minute refresh of relative
   if (state.pick && !ps.some((p) => p.player === state.pick)) state.pick = '';
   state.slot = slots(ps);
   renderControls(ps);
-  renderToday(ps);
+  renderStats(ps);
+  renderNow(ps);
   drawRating();
   renderPlayers(ps);
   renderRecent();
@@ -1436,7 +1635,7 @@ async function poll() {
   // down: why this poll brought nothing. 'net': no answer (the server or the tailnet is down); 'http': it answered with an error
   state.down = !r ? 'net' : r.status === 304 || d ? '' : 'http';
   try {
-    if (r?.status === 304) { state.lastOk = Date.now(); if (Date.now() - state.drawn > 60e3) render(true); }
+    if (r?.status === 304) { state.lastOk = Date.now(); if (Date.now() - state.drawn > 60e3) render(true); else if (state.drawn) renderStats(players(state.rows, tMin())); }
     else if (d) {
       state.rows = d.rows; state.accounts = d.accounts || null; state.puzzles = d.puzzles || null; state.etag = r.headers.get('etag'); state.lastOk = Date.now();
       render();
