@@ -21,7 +21,7 @@ grep -q tinue-handoff "$D/index.html" && die "$D is the handoff page already"
 V=$(sed -n 's/^{"v":\([0-9]*\),.*/\1/p' "$D/version.json"); [ -n "$V" ] || die "no version in $D/version.json"
 # The handoff page runs that build's own modules, under their own addresses.
 for f in api results playon rush-rules; do [ -s "$D/$f.js" ] || die "$D/$f.js is missing (a build with the results queue is needed)"; done
-grep -q "from './results.js?v=$V'" "$D/app.js" || die "$D/app.js is not build $V with the results queue"
+grep -Eq "from ?[\"']\./results\.js\?v=$V[\"']" "$D/app.js" || die "$D/app.js is not build $V with the results queue"
 grep -q "^window.TINUE_API = 'http" "$D/config.js" || die "$D/config.js names no API"
 N=$(date +%s); [ "$N" -gt "$V" ] || N=$((V + 1))
 if [ -n "$DRY" ]; then echo "[dry-run] write $D/index.html (the handoff to $NEW_URL, modules of build $V) and $D/version.json (v $N)"; exit 0; fi

@@ -76,7 +76,7 @@ test('build-static --dry-run: NAME picks the directory and the site address; STU
 test('a real beta build (when the engine binary is here): its own directory, marked, no puzzle pages, every module present', () => {
   if (!fs.existsSync(root + 'public/syntaks/syntaks.wasm')) { console.log('   (skipped: no public/syntaks/syntaks.wasm in this checkout)'); return; }
   const site = fs.mkdtempSync(path.join(os.tmpdir(), 'tinue-beta-'));
-  const r = sh('build-beta.sh', [], { SITE: site, TINUE_DB: '/nonexistent.db', TINUE_MAIN: '/nonexistent' });
+  const r = sh('build-beta.sh', [], { SITE: site, TINUE_DB: '/nonexistent.db', TINUE_MAIN: '/nonexistent', TINUE_ESBUILD: 'none' });
   assert.equal(r.status, 0, r.stderr + r.stdout);
   assert.deepEqual(fs.readdirSync(site).filter((f) => !f.startsWith('.')), ['tinue-beta']);
   const out = path.join(site, 'tinue-beta');
@@ -98,6 +98,12 @@ test('a real beta build (when the engine binary is here): its own directory, mar
     for (const [, spec] of fs.readFileSync(path.join(out, f), 'utf8').matchAll(/(?:from |import\()'(\.\.?\/[^']+\.js[^']*)'/g)) { assert.ok(spec.endsWith('?v=' + v), `${f}: ${spec}`); stamped++; }
   }
   assert.ok(stamped > 30, String(stamped));
+  // every module app.js imports is listed in the page, at the very address it is imported by (another would load twice)
+  const listed = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map((m) => m[1]);
+  assert.ok(listed.length > 25 && new Set(listed).size === listed.length, String(listed.length));
+  for (const l of listed) assert.ok(l.endsWith('?v=' + v) && fs.existsSync(path.join(out, l.split('?')[0])), l);
+  for (const [, f] of app.matchAll(/^import .* from '\.\/([^']+)';/gm)) assert.ok(listed.includes(f + '?v=' + v), f);
+  assert.ok(!listed.some((l) => /^(app|rush|sound-lab)\.js/.test(l)), 'not the page itself, nor what loads on demand');
   fs.rmSync(site, { recursive: true });
 });
 

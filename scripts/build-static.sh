@@ -68,6 +68,7 @@ OUT="$SITE/$NAME"
 # Everything the build needs is checked before the old tinue/ is cleared, so a failed build leaves the site as it was.
 # The puzzle pages (build-stubs) read data/tinue.db, which isn't in git (a fresh worktree has none).
 [ "$STUBS" = none ] || [ -f "$DB" ] || { echo "$DB is missing (the puzzle pages need it); $OUT left as it was" >&2; exit 1; }
+case "${TINUE_ESBUILD:-none}" in none) ;; *) [ -x "$TINUE_ESBUILD" ] || { echo "TINUE_ESBUILD=$TINUE_ESBUILD is not a program; $OUT left as it was" >&2; exit 1; } ;; esac # (scripts/shrink.mjs)
 # Syntaks in the browser (play-on's defender): built from source when missing or older than its recipe
 # (wasm/syntaks/build.sh, ~2 min). One that doesn't load (a copy cut short) is rebuilt once. Its URL carries the
 # binary's hash, so browsers keep it until it changes.
@@ -142,3 +143,5 @@ const root=process.argv[1]; const seen=new Set(); const missing=[];
 function walk(f){ if(seen.has(f))return; seen.add(f); const src=fs.readFileSync(path.join(root,f),'utf8');
   for (const m of src.matchAll(/(?:from|new URL\(|import\()\s*'\.\/([^'?]+)/g)) { const t=path.normalize(path.join(path.dirname(f), m[1])); if(!fs.existsSync(path.join(root,t))) missing.push(f+' -> '+t); else if (t.endsWith('.js')) walk(t); } }
 walk('app.js'); if (missing.length) { console.error('MISSING MODULES:', missing); process.exit(1); }" "$OUT"
+# Lighter for the first visit: modules listed up front, minified, the styles in the page (last: everything above reads the source).
+node scripts/shrink.mjs "$OUT"
