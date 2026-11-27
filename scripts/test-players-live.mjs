@@ -382,11 +382,21 @@ try {
     let m = PF.days([], day(10, 12));
     assert.equal(m.past.length, 0);
     assert.deepEqual(PF.at(m, 'attempts', m.clock), { value: 0, days: 0, median: null, few: 'days', pr: null });
-    assert.equal(PF.at(m, 'solved', m.clock).value, null); assert.deepEqual(PF.cloud(m.past, 'attempts'), []);
+    assert.equal(PF.at(m, 'solved', m.clock).value, null); assert.ok(PF.bands(m.past, 'attempts').every((b) => b.q === null));
     // only today; then the first, partial day is never compared with
     assert.equal(PF.days([row(day(10, 9))], day(10, 12)).past.length, 0);
     assert.equal(PF.days([row(day(9, 9)), row(day(10, 9))], day(10, 12)).past.length, 0);
     assert.equal(PF.days([row(day(8, 9)), row(day(10, 9))], day(10, 12)).past.length, 1, 'a day nobody played is a day');
+    // since: earlier days are not compared with, but a player seen on one is not new
+    {
+      const rs = [row(day(5, 9)), row(day(6, 9), 'b'), row(day(8, 9), 'b'), row(day(9, 9), 'c')];
+      const mm = PF.days(rs, day(10, 12), day(8));
+      assert.deepEqual(mm.past.map((d) => d.t0), [day(8), day(9)]);
+      assert.deepEqual(mm.past.map((d) => PF.valueAt(d.fresh, 12 * H)), [0, 1]);
+      assert.equal(PF.days(rs, day(10, 12), day(1)).past.length, 4, 'since before the data changes nothing');
+      assert.equal(deep(PF.days(rs, day(10, 12), 0)), deep(PF.days(rs, day(10, 12))));
+      assert.equal(PF.days(rs, day(10, 12), day(20)).past.length, 0);
+    }
     // seven whole days, day i with i attempts at 09:00 (all missed but the first) and one at 20:00; day 5 empty
     const rows = [row(day(1, 9), 'z')];
     for (let i = 2; i <= 8; i++) if (i !== 5) { for (let j = 0; j < i; j++) rows.push(row(day(i, 9, j), `p${j}`, j ? 0 : 1)); rows.push(row(day(i, 20), 'late')); }
@@ -415,15 +425,18 @@ try {
       const mm = PF.days([row(day(1, 9)), row(day(2 + n, 8))], day(2 + n, 12));
       assert.equal(mm.past.length, n); assert.equal(PF.at(mm, 'attempts', mm.clock).pr != null, some);
     }
-    // the cloud: the same every time, bounded, inside the day, on the lines
-    assert.deepEqual(PF.cloud(m.past, 'attempts'), PF.cloud(PF.days(rows, day(9, 13)).past, 'attempts'));
-    for (const n of [7, 200, 1000]) {
-      const past = Array.from({ length: n }, (_, i) => ({ ...m.past[0], t0: day(1) + i * 864e5 }));
-      const c = PF.cloud(past, 'attempts');
-      assert.ok(c.length <= 360 && c.length >= 150, `${n} days: ${c.length} dots`);
-      assert.ok(c.every((d) => d.c >= 0 && d.c < PF.DAY && d.v === PF.valueAt(m.past[0].attempts, d.c)));
-      assert.ok(new Set(c.map((d) => Math.round(d.c / 6e5))).size > 60, 'spread over the clock');
+    // percentile lines: the whole day, in order, the middle one the median the hover gives, none on under 5 days
+    assert.equal(PF.quantile([1, 2, 3, 4], 0.5), 2.5); assert.equal(PF.quantile([1, 2, 3, 4, 5], 0.25), 2); assert.equal(PF.quantile([7], 0.9), 7);
+    for (const k of PF.KEYS) {
+      const b = PF.bands(m.past, k);
+      assert.equal(b.length, 145); assert.equal(b[0].c, 0); assert.equal(b[144].c, PF.DAY);
+      for (const { c, q } of b) {
+        const a = PF.at(m, k, c);
+        assert.equal(q == null, a.days < PF.MIN_DAYS);
+        if (q) { assert.ok(q.every((v, i) => !i || v >= q[i - 1])); assert.ok(Math.abs(q[2] - a.median) < 1e-9); }
+      }
     }
+    assert.ok(PF.bands(m.past.slice(0, 4), 'attempts').every((b) => b.q === null));
     // why there is no percentile
     assert.equal(PF.at(m, 'solved', 9.5 * H).few, 'tries'); assert.equal(PF.at(m, 'solved', m.clock).few, ''); assert.equal(PF.at(PF.days(rows, day(5, 12)), 'solved', 12 * H).few, 'days');
     // a row with no usable time makes no days, and its player is still not new
@@ -435,11 +448,10 @@ try {
     // 0 and 100 are shown only when exact
     assert.deepEqual([0, 0.17, 0.5, 49.5, 99.4, 99.83, 100].map(PF.whole), [0, 1, 1, 50, 99, 99, 100]);
     assert.equal(PF.whole(PF.rank([...Array(299).fill(1), 9], 9)), 99);
-    // the axis: one freak day does not set it, today always fits, quiet data keeps a floor
-    const line = (v) => ({ attempts: { v: v ? [1, v] : [] } });
-    const top = (past, today) => PF.top({ past: past.map(line), today: line(today) }, 'attempts');
-    assert.equal(top([40, 42, 38, 50, 900], 22), 75); assert.equal(top([40, 42, 38, 50, 60], 22), 60); assert.equal(top([40, 42, 38, 50, 900], 300), 300);
-    assert.equal(top([0, 0, 0, 0, 0, 7], 1), 7, 'empty days do not pull it down'); assert.equal(top([], 0), 2); assert.equal(top([2, 2, 2, 2, 4], 0), 4, 'twice is not a freak');
+    // the axis: all of today and of the lines fits, one freak day among many does not set it, quiet data keeps a floor
+    const top = (q90, today) => PF.top({ today: { attempts: { v: today ? [1, today] : [] } } }, 'attempts', [{ q: null }, { q: [0, 0, 0, 0, q90] }]);
+    assert.equal(top(40, 22), 40); assert.equal(top(40, 300), 300); assert.equal(top(0, 0), 2); assert.equal(PF.top(m, 'attempts', [{ q: null }]), Math.max(2, ...m.today.attempts.v));
+    assert.equal(PF.quantile([...Array(10).fill(40), 900], 0.9), 40, 'a freak day among eleven');
     // DST: spring forward 2026-03-08 (23 h), back 2026-11-01 (25 h)
     const spring = PF.days([row(day(6, 9, 0, 2)), row(day(8, 1, 30, 2)), row(day(8, 3, 30, 2)), row(day(8, 9, 0, 2)), row(day(8, 23, 59, 2))], day(9, 9, 0, 2));
     assert.deepEqual(spring.past.map((d) => (d.t1 - d.t0) / H), [24, 23]);
@@ -473,7 +485,7 @@ try {
     // 20k rows over 400 days, quickly
     process.env.TZ = 'America/Los_Angeles';
     const many = []; for (let i = 0; i < 20000; i++) many.push(row(day(1) - 400 * 864e5 + i * 400 * 864 * 5 - 0, `p${i % 300}`, i % 2));
-    const began = performance.now(), big = PF.days(many, day(2, 12)); for (const k of PF.KEYS) { PF.at(big, k, big.clock); PF.cloud(big.past, k); }
+    const began = performance.now(), big = PF.days(many, day(2, 12)); for (const k of PF.KEYS) { PF.at(big, k, big.clock); PF.bands(big.past, k); }
     assert.ok(performance.now() - began < 1000, 'quick on 20k rows'); assert.ok(big.past.length >= 399);
     assert.equal(deep(PF.days(rows, day(9, 12))), deep(m), 'pure');
   } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }

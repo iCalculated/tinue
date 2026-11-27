@@ -53,7 +53,7 @@
   .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 24px; }
   .stat { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; column-gap: 8px; }
   .stat .lbl { grid-column: 1 / -1; }
-  /* percentile feedback: today's line over a cloud of earlier days */
+  /* percentile feedback: today's line over the percentile lines of earlier days */
   .stat .pr { min-height: 37px; text-align: right; white-space: nowrap; line-height: 1.2; }
   .stat .pr strong { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); }
   .stat .pr span { display: block; font-size: 11px; }
@@ -61,7 +61,7 @@
   .pf svg { display: block; width: 100%; touch-action: pan-y; }
   .pf svg text { font-size: 10px; }
   .pf .tip { padding: 2px 6px; font-size: 11px; line-height: 1.35; white-space: nowrap; }
-  .pf .past { fill: var(--muted); fill-opacity: .22; } /* each dot, so a crowd is darker */
+  .pf .q { fill: none; stroke: var(--faint); stroke-width: 1; stroke-linejoin: round; stroke-opacity: .75; } .pf .q50 { stroke: var(--muted); stroke-width: 1.5; stroke-opacity: 1; } .pf .q10, .pf .q90 { stroke-dasharray: 2 3; }
   .pf .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .pf .end { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
   .pf .cross { stroke: var(--faint); } .pf svg * { pointer-events: none; } /* the svg itself takes the pointer, so a redraw under it keeps the hover */
@@ -450,6 +450,7 @@ function renderNow(ps) {
 /* pf:begin */
 const PF = (() => {
   const DAY = 864e5, KEYS = ['attempts', 'solved', 'players', 'fresh'];
+  const QS = [10, 25, 50, 75, 90];
   const MIN_DAYS = 5; // fewer earlier days than this: no percentile
   const EARLIEST = Date.UTC(2010, 0, 1); // a row stamped before this has no usable time
   const MIN_TRIES = 5; // fewer attempts so far today: no percentile for the solved share
@@ -483,10 +484,11 @@ const PF = (() => {
   }
   // rows (oldest first) -> today, and every whole local day before it. The day of the first row is left out: the data
   // starts part-way through it. A day nobody played is a day too. A row with no usable time is on no day.
-  function days(rows, now) {
+  // Days before since are not compared with, but their rows still count for who is new.
+  function days(rows, now, since = 0) {
     const t0 = dayStart(now), today = newDay(t0), past = [], at = new Map(), seen = new Set();
     const first = rows.find((r) => r.t >= EARLIEST);
-    if (first) for (let d = dayStart(first.t, 1); d < t0; d = dayStart(d, 1)) { const day = newDay(d); past.push(day); at.set(d, day); }
+    if (first) for (let d = dayStart(Math.max(first.t, since - 1), 1); d < t0; d = dayStart(d, 1)) { const day = newDay(d); past.push(day); at.set(d, day); }
     let cur = null; // the day of the last row, so a run of rows on one day costs one Date
     for (const r of rows) {
       const fresh = !seen.has(r.player);
@@ -513,13 +515,10 @@ const PF = (() => {
     return (100 * below) / vals.length;
   }
   const whole = (pr) => (pr <= 0 ? 0 : pr >= 100 ? 100 : Math.max(1, Math.min(99, Math.round(pr)))); // 0 and 100 only when exact
-  // Top of a count's axis: room for all of today and of the past, unless the past's busiest day is over twice its 9th in 10:
-  // then half as much again as that one, so a freak day does not flatten the rest.
-  function top(m, k) {
-    const last = (l) => (l.v.length ? l.v[l.v.length - 1] : 0);
-    const ends = m.past.map((d) => last(d[k])).filter((v) => v > 0).sort((a, b) => a - b), n = ends.length;
-    const busy = ends[Math.floor(0.9 * (n - 1))], max = ends[n - 1];
-    return Math.max(2, last(m.today[k]), n ? (max > 2 * busy ? 1.5 * busy : max) : 0);
+  // Top of a count's axis: all of today and of the percentile lines. A freak day is above the top line, so it does not flatten the rest.
+  function top(m, k, lines) {
+    const v = m.today[k].v;
+    return Math.max(2, v.length ? v[v.length - 1] : 0, ...lines.map((b) => (b.q ? b.q[b.q.length - 1] : 0)));
   }
   function median(vals) {
     if (!vals.length) return null;
@@ -532,25 +531,20 @@ const PF = (() => {
     const few = vals.length < MIN_DAYS ? 'days' : k === 'solved' && valueAt(m.today.attempts, c) < MIN_TRIES ? 'tries' : '';
     return { value, days: vals.length, median: median(vals), few, pr: few ? null : rank(vals, value) };
   }
-  const hash = (a, b) => { // 0..1, the same every time for the same day and place
-    let x = (Math.imul(Math.floor(a / 6e4) | 0, 0x9e3779b1) ^ Math.imul(b + 1, 0x85ebca6b)) >>> 0;
-    x = Math.imul(x ^ (x >>> 15), 0x2c1b3c6d); x = Math.imul(x ^ (x >>> 12), 0x297a2d39);
-    return ((x ^ (x >>> 15)) >>> 0) / 2 ** 32;
-  };
-  // About max dots off the earlier days' lines: each day gives the same number, one in each equal slice of the clock at
-  // a place set by its date, so nothing moves between polls.
-  function cloud(past, k, max = 360) {
-    const per = Math.max(1, Math.min(24, Math.floor(max / (past.length || 1)))), every = Math.ceil(past.length / max), out = [];
-    past.forEach((d, j) => {
-      if (j % every) return;
-      for (let i = 0; i < per; i++) {
-        const c = ((i + hash(d.t0, i)) / per) * DAY, v = valueAt(d[k], c);
-        if (v != null) out.push({ c, v });
-      }
-    });
+  function quantile(sorted, p) { // p 0..1, between the two nearest values
+    const at = p * (sorted.length - 1), lo = Math.floor(at), hi = Math.ceil(at);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (at - lo);
+  }
+  // The earlier days' percentiles through the day: [{ c, q: one value per QS }], where enough days have a value.
+  function bands(past, k, step = DAY / 144) {
+    const out = [];
+    for (let c = 0; c <= DAY; c += step) {
+      const a = pastAt(past, k, c).sort((x, y) => x - y);
+      out.push({ c, q: a.length < MIN_DAYS ? null : QS.map((p) => quantile(a, p / 100)) });
+    }
     return out;
   }
-  return { DAY, KEYS, MIN_DAYS, MIN_TRIES, dayStart, clockOf, days, valueAt, rank, whole, top, median, at, hash, cloud };
+  return { DAY, KEYS, MIN_DAYS, MIN_TRIES, dayStart, clockOf, days, valueAt, rank, whole, top, median, at, QS, quantile, bands };
 })();
 /* pf:end */
 
@@ -587,8 +581,9 @@ document.addEventListener('pointerdown', (ev) => { for (const f of figs.values()
 
 const pfFmt = (k, v) => (v == null ? '–' : k === 'solved' ? pct(v) : String(+v.toFixed(1)));
 const pfClock = (c) => new Date(2001, 0, 1, 0, 0, Math.floor(Math.min(c, PF.DAY - 1) / 1000)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const PF_SINCE = +new Date(2026, 10, 15); // the days compared with: before Nov 15 there were too few attempts (Sasha, Nov 26)
 function renderPf(now) {
-  const m = PF.days(state.rows, now);
+  const m = PF.days(state.rows, now, PF_SINCE);
   for (const f of figs.values()) drawPf(f, m);
 }
 function drawPf(f, m) {
@@ -596,21 +591,33 @@ function drawPf(f, m) {
   const of = pl(q.days, 'day');
   f.pr.replaceChildren(...(q.pr == null ? [] : [h('strong', { text: `PR ${PF.whole(q.pr)}` })]),
     ...(q.days ? [h('span', { class: 'muted', text: q.few === 'days' ? pl(q.days, 'past day') : q.few ? `under ${PF.MIN_TRIES} attempts` : `vs ${of}` })] : []));
-  f.pr.title = q.few === 'days' ? `A percentile needs ${PF.MIN_DAYS} past days` : q.few ? `A percentile needs ${PF.MIN_TRIES} attempts today` : `Beats ${PF.whole(q.pr)}% of ${of} at this time of day (a tie counts half)`;
-  const share = k === 'solved', fmt = (v) => (share ? pct(v) : String(v)), dots = PF.cloud(m.past, k);
-  const yt = share ? { hi: 1, ticks: [0, 0.5, 1] } : nice(0, PF.top(m, k), 3);
+  f.pr.title = q.few === 'days' ? `A percentile needs ${PF.MIN_DAYS} past days` : q.few ? `A percentile needs ${PF.MIN_TRIES} attempts today` : `Beats ${PF.whole(q.pr)}% of the ${of} since Nov 15 at this time of day (a tie counts half)`;
+  const share = k === 'solved', fmt = (v) => (share ? pct(v) : String(v)), bands = PF.bands(m.past, k);
+  const yt = share ? { hi: 1, ticks: [0, 0.5, 1] } : nice(0, PF.top(m, k, bands), 3);
   const ticks = yt.ticks.filter((v) => share || Number.isInteger(v));
   const W = Math.max(120, f.box.clientWidth), H = W < 220 ? 92 : 112;
-  const mg = { t: 6, r: 5, b: 16, l: Math.max(26, Math.ceil(7 * Math.max(...ticks.map((v) => fmt(v).length))) + 8) };
+  const mg = { t: 6, r: 18, b: 16, l: Math.max(26, Math.ceil(7 * Math.max(...ticks.map((v) => fmt(v).length))) + 8) };
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H);
   const x = lin(0, PF.DAY, mg.l, W - mg.r), y = lin(0, yt.hi, H - mg.b, mg.t);
   svg.replaceChildren();
   yGrid(svg, y, ticks, mg.l, W - mg.r, fmt);
   for (const hr of W < 220 ? [6, 18] : [6, 12, 18]) svg.append(s('text', { x: x(hr * HOUR), y: H - 4, 'text-anchor': 'middle', text: new Date(2001, 0, 1, hr).toLocaleTimeString([], { hour: 'numeric' }) }));
-  const g = s('g', { class: 'past' }), rad = W < 220 ? 1.75 : 2.25;
-  for (const d of dots) { // off the top of the axis: a small arrowhead at its edge
-    const cx = x(d.c).toFixed(1);
-    g.append(d.v > yt.hi ? s('path', { d: `M${cx},${mg.t - 5}l3,5h-6z` }) : s('circle', { cx, cy: y(d.v).toFixed(1), r: rad }));
+  const g = s('g');
+  PF.QS.forEach((p, i) => {
+    let d = '', on = false;
+    for (const b of bands) { if (b.q) d += `${on ? 'L' : 'M'}${x(b.c).toFixed(1)},${y(b.q[i]).toFixed(1)}`; on = !!b.q; }
+    if (!d) return;
+    g.append(s('path', { class: `q q${p}`, d }));
+  });
+  const end = bands[bands.length - 1].q;
+  if (end) {
+    const put = [];
+    for (const p of [50, 90, 10, 75, 25]) { // the ones that matter most first
+      const py = y(end[PF.QS.indexOf(p)]);
+      if (put.some((o) => Math.abs(o - py) < 9)) continue;
+      put.push(py);
+      g.append(s('text', { class: 'ql', x: W - mg.r + 3, y: py, dy: '0.32em', text: String(p) }));
+    }
   }
   svg.append(g);
   if (q.value != null) {
