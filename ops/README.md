@@ -1,8 +1,9 @@
 # The API's Linux host
 
-Players reach the API through Cloudflare: `api.tinue.me` and `tinue-api.shydrie.xyz` (the old name, kept for open tabs,
-bots and shared links), both proxied A records -> Caddy -> `127.0.0.1:8642` (node, systemd `tinue.service`, user `tinue`).
-`tinue-stats.shydrie.xyz` -> the players page on 8792. No address of the host is in this repository; scripts take it as
+Players reach it through Cloudflare (proxied A records -> Caddy): `tinue.me` is the page (`/beta/` the beta; `page.sh`, from
+`/srv/tinue-page`), `api.tinue.me` the API on `127.0.0.1:8642` (node, systemd `tinue.service`, user `tinue`), `stats.tinue.me`
+the players page on 8792. The old names, `tinue-api.shydrie.xyz` (kept for open tabs, bots and shared links) and
+`tinue-stats.shydrie.xyz` (redirects to `stats.tinue.me`), come over crux's tunnel and the hop. No address of the host is in this repository; scripts take it as
 `TINUE_HOST=user@host` (an `~/.ssh/config` alias is best).
 
 | | |

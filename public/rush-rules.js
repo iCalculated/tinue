@@ -653,14 +653,15 @@ const DAY_MS = 864e5;
 export const RUN_TTL_MS = 30 * DAY_MS, SPARE_AGE_MS = 25 * DAY_MS;
 // Spares: SPARE_KEEP runs per mode of SPARE_PAGES pages (2 × 80 puzzles: more than a strong Rush, and a long Streak),
 // in at most SPARE_CHARS of JSON in localStorage. QUEUE_MAX results at most wait to be sent.
-export const SPARE_KEEP = 3, SPARE_PAGES = 2, SPARE_CHARS = 1.2e6, QUEUE_MAX = 20;
+// SPARE_V 2: runs fetched before flat wins left Rush (2026-11-26) aren't started.
+export const SPARE_V = 2, SPARE_KEEP = 3, SPARE_PAGES = 2, SPARE_CHARS = 1.2e6, QUEUE_MAX = 20;
 // (a token: <time base 36>.<random>.<mac>, server/rush.js signer)
 export const tokenTime = (tok) => { const m = /^([0-9a-z]+)\.[\w-]+\.[\w-]+$/.exec(String(tok ?? '')); return m ? parseInt(m[1], 36) : null; };
 const validRunPuzzle = (p) => !!p && typeof p === 'object' && str(p.id, 40) && p.size === SIZE && str(p.tps, 400) && num(p.rating)
   && (p.tree === 'win' || (!!p.tree && typeof p.tree === 'object' && !Array.isArray(p.tree))) && (p.komi == null || num(p.komi));
 // A stored spare: { v, mode, token, pages: [{ start, ids, sig }], puzzles } as GET /api/rush/run handed them out.
 export function validSpare(x) {
-  return !!x && typeof x === 'object' && x.v === 1 && (x.mode === 'rush' || x.mode === 'streak') && tokenTime(x.token) != null
+  return !!x && typeof x === 'object' && x.v === SPARE_V && (x.mode === 'rush' || x.mode === 'streak') && tokenTime(x.token) != null
     && Array.isArray(x.pages) && x.pages.length >= 1 && x.pages.length <= 12
     && x.pages.every((g) => !!g && Number.isInteger(g.start) && g.start >= 0 && Array.isArray(g.ids) && g.ids.every((i) => str(i, 40)) && str(g.sig, 64))
     && Array.isArray(x.puzzles) && x.puzzles.length >= 1 && x.puzzles.length <= 400 && x.puzzles.every(validRunPuzzle);

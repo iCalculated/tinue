@@ -53,7 +53,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // A puzzle's address is a real path, <app>/puzzle/<id>, so pasting it into Discord unfurls: the static build writes
 // a small page there with the puzzle's embed tags that forwards to #/puzzle/<id>, and the app then shows the path
-// again. Other pages stay hash routes. APP is the app's directory (/tinue/ on shydrie.xyz, / on a dev server).
+// again. Other pages stay hash routes. APP is the app's directory (/ on tinue.me and a dev server, /beta/ for the beta).
 const APP = location.pathname.replace(/(puzzle\/[^/]+|glossary|me|leaderboard)\/?$/, '').replace(/[^/]*$/, '');
 // The query string (an old ?board= link's too, which nothing reads any more) rides along on every address the app shows or shares.
 // A build without those pages (the beta: build-static.sh STUBS=none) keeps puzzles on the hash route, so a reload works.
@@ -299,7 +299,7 @@ async function switchTo(p) {
   if (now.token && now.token !== p.token) store.set('parked', now); else store.del('parked');
   window.tinueInstall(p); location.reload();
 }
-const bringLine = () => window.TINUE_OLD && !me?.name && !store.get('out', []).includes(store.get('brought', null)?.o) ? '<p class="hint">Played on shydrie.xyz? <button type="button" class="link" data-bring>Bring your account</button></p>' : '';
+const bringLine = () => window.TINUE_OLD && !me?.name && !store.get('out', []).includes(store.get('brought', null)?.o) ? '<p class="hint">Played before the move to tinue.me? <button type="button" class="link" data-bring>Bring your account</button></p>' : '';
 const parkedLine = (cls = '', role = '') => { const p = parked(); return p ? `<button type="button" class="link ${cls}"${role} data-unpark>Switch to ${esc(p.name || 'your other guest')}</button>` : ''; };
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-bring]')) window.tinueBring?.();
@@ -316,7 +316,7 @@ async function askTwo() {
   const label = (u) => u?.name || (u ? `a guest rated ${Math.round(u.rating)}` : 'a guest');
   const bar = Object.assign(document.createElement('div'), { id: 'two-bar', className: 'build-bar' });
   bar.setAttribute('role', 'status'); bar.style.flexWrap = 'wrap';
-  const msg = Object.assign(document.createElement('span'), { className: 'msg', textContent: `You have two players: ${label(me)} here, ${label(r.user)} from shydrie.xyz.` });
+  const msg = Object.assign(document.createElement('span'), { className: 'msg', textContent: `You have two players: ${label(me)} on tinue.me, ${label(r.user)} from before the move.` });
   const b = (text, fn) => Object.assign(document.createElement('button'), { type: 'button', textContent: text, onclick: fn });
   bar.append(msg, b(`Use ${label(r.user)}`, () => { done(); switchTo({ ...p, me: r.user.name ? { name: r.user.name } : null }); }),
     b(`Keep ${label(me)}`, () => { done(); store.set('parked', { token: p.token, gid: p.gid ?? null, name: r.user.name ?? null }); bar.remove(); renderUser(); fitDock(); }));

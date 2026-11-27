@@ -83,7 +83,7 @@ test('a real beta build (when the engine binary is here): its own directory, mar
   const out = path.join(site, 'tinue-beta');
   assert.ok(!fs.existsSync(path.join(out, 'puzzle')));
   const cfg = fs.readFileSync(path.join(out, 'config.js'), 'utf8');
-  assert.match(cfg, /window\.TINUE_API = 'https:\/\/tinue-api\.shydrie\.xyz';/);
+  assert.match(cfg, /window\.TINUE_API = 'https:\/\/api\.tinue\.me';/);
   assert.match(cfg, /window\.TINUE_STUBS = false;/);
   assert.match(cfg, /window\.TINUE_BETA = '[A-Za-z0-9@._\/ -]+';/);
   assert.match(cfg, /^window\.TINUE_ANALYSIS = true;$/m, 'the beta has the analysis view');

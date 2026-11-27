@@ -139,7 +139,7 @@ assert.equal(await ls('parked'), null); await ev(`(document.querySelector('#clai
 await nav(OLD + '#/'); await atNew(); await sleep(400); assert.equal(await ls('token'), null);
 await nav(NEW + '#hs=1&o=zzz&to=x'); await atNew(); await sleep(400); assert.equal(await ls('token'), null, 'nor by a crafted link'); await ev(`tinueBring()`); await atNew(); await sleep(600); assert.equal(await ls('token'), null);
 step('signed out on the new page: the old one signs nobody in again, parked players are gone too');
-await setOn(NEW, {}); await nav(NEW); await atNew(); await ev(`(document.querySelector('#claim-open').click(), true)`); assert.match(await ev(`document.querySelector('#userbox').innerText`), /Played on shydrie\.xyz\? Bring your account/);
+await setOn(NEW, {}); await nav(NEW); await atNew(); await ev(`(document.querySelector('#claim-open').click(), true)`); assert.match(await ev(`document.querySelector('#userbox').innerText`), /Played before the move to tinue\.me\? Bring your account/);
 await shot('bring'); await ev(`(document.querySelector('[data-bring]').click(), true)`); await until(`localStorage.getItem('tinue.token') !== null`, 'brought'); await atNew(); await named('tester1'); assert.equal(await ls('token'), t1);
 step('"Bring your account" for someone who came straight to the new page');
 // a hop that never arrives: the next visit brings the player all the same
@@ -151,7 +151,7 @@ step('a hop that fails and a crafted key cost nothing: the next visit brings the
 // ---------- 4: two players ----------
 await setOn(OLD, { token: t1, prefs }); await setOn(NEW, { token: t2, gid: 'b'.repeat(32) });
 await nav(OLD); await atNew(); await until(`!!document.querySelector('#two-bar')`, 'the question'); assert.equal(await ls('token'), t2);
-await shot('two-players'); assert.match(await ev(`document.querySelector('#two-bar').innerText`), /You have two players: tester2 here, tester1 from shydrie\.xyz\./);
+await shot('two-players'); assert.match(await ev(`document.querySelector('#two-bar').innerText`), /You have two players: tester2 on tinue\.me, tester1 from before the move\./);
 await ev(`(document.querySelectorAll('#two-bar button')[1].click(), true)`); assert.equal(await ls('token'), t2); assert.equal((await ls('parked')).token, t1);
 await ev(`(document.querySelector('[data-unpark]').click(), true)`); await named('tester1'); assert.equal(await ls('token'), t1); assert.equal((await ls('parked')).token, t2); assert.equal((await ls('parked')).gid, 'b'.repeat(32));
 await ev(`(document.querySelector('[data-unpark]').click(), true)`); await named('tester2'); assert.equal((await ls('parked')).token, t1); assert.equal(await ls('gid'), 'b'.repeat(32));

@@ -172,6 +172,9 @@ export function introOf(meta, size, tps) {
   } catch { return null; }
 }
 
+// A puzzle whose solution ends on the flat count (shared/themes.js gaelet). Rush and Streak are roads only.
+export const flatWin = (p) => (p.themes || '').split(',').includes('gaelet');
+
 // Target rating of puzzle i, before jitter.
 export function rampTarget(mode, i, lo, hi) {
   const { n, pow } = RAMP[mode];
@@ -577,7 +580,7 @@ CREATE INDEX IF NOT EXISTS rush_lead_top ON rush_lead(mode, size, score DESC, ts
 
   // The puzzles a run may use, 6×6 only, sorted by rating: the served pool (as the Puzzles page's first stage), or,
   // with fewer than MIN_SERVED served puzzles, every pickable one (never paused or rejected: Q11).
-  // Never a refunded puzzle (flaw = 2: it called a winning move a miss). Puzzles that list other winning moves (flaw = 1:
+  // Never a flat win (theme gaelet: Sasha, 2026-11-26), and never a refunded puzzle (flaw = 2: it called a winning move a miss). Puzzles that list other winning moves (flaw = 1:
   // alts / altsAt) are in (Sasha, 2026-11-19: "known alternatives seem fine to include"): Rush now plays a listed move
   // out as the puzzle page does (public/rush.js), so it no longer has to prove nothing.
   // Rebuilt every 10 minutes after the request that finds it stale (that request gets the old one): ratings drift with
@@ -585,8 +588,8 @@ CREATE INDEX IF NOT EXISTS rush_lead_top ON rush_lead(mode, size, score DESC, ts
   let cache = null, rebuilding = false;
   function build() {
     const all = [], srv = [];
-    for (const r of db.prepare('SELECT id, size, rating, turn, grade, kind, status, flaw FROM puzzles WHERE size = ?').iterate(SIZE)) {
-      if (!pickable(r) || r.flaw === 2) continue;
+    for (const r of db.prepare('SELECT id, size, rating, turn, grade, kind, status, flaw, themes FROM puzzles WHERE size = ?').iterate(SIZE)) {
+      if (!pickable(r) || r.flaw === 2 || flatWin(r)) continue;
       const row = { id: r.id, rating: r.rating };
       all.push(row);
       if (served(r)) srv.push(row);
@@ -600,7 +603,7 @@ CREATE INDEX IF NOT EXISTS rush_lead_top ON rush_lead(mode, size, score DESC, ts
     return cache.rows;
   }
 
-  const byId = db.prepare('SELECT id, size, tps, komi, plies, tree, rating, swing, turn, grade, kind, status, flaw, meta FROM puzzles WHERE id = ?');
+  const byId = db.prepare('SELECT id, size, tps, komi, plies, tree, rating, swing, turn, grade, kind, status, flaw, themes, meta FROM puzzles WHERE id = ?');
   const intros = new Map(); // id -> introOf (a game's history doesn't change; one replay per puzzle per process)
   const exists = db.prepare('SELECT 1 FROM puzzles WHERE id = ?');
   // A puzzle as stored, its own orientation: what a combo credit is checked by (cleanRun, only for a credited move).
@@ -609,11 +612,11 @@ CREATE INDEX IF NOT EXISTS rush_lead_top ON rush_lead(mode, size, score DESC, ts
   const ratingOf = db.prepare('SELECT rating FROM puzzles WHERE id = ?');
   // What the browser needs to judge a puzzle by itself: position and tree, the other known wins (alts at the root,
   // altsAt deeper in, as the puzzle endpoint sends them: swingPublic), and its
-  // intro (before, last) when the game is on record. Null for a puzzle that has since been paused, rejected or refunded
+  // intro (before, last) when the game is on record. Null for a puzzle that has since been paused, rejected, refunded or tagged a flat win
   // (the pool is up to 10 minutes old). The page signature covers ids only, so the intro changes nothing signed.
   function runPuzzle(id) {
     const p = byId.get(id);
-    if (!p || p.size !== SIZE || !pickable(p) || p.flaw === 2) return null;
+    if (!p || p.size !== SIZE || !pickable(p) || p.flaw === 2 || flatWin(p)) return null;
     let alts = {};
     try { const { pre0, ...rest } = swingPublic(p.swing); alts = rest; } catch {}
     if (!intros.has(p.id)) { let m = null; try { m = p.meta ? JSON.parse(p.meta) : null; } catch {} intros.set(p.id, introOf(m, p.size, p.tps)); }

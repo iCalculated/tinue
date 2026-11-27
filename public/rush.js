@@ -157,11 +157,33 @@ export async function enter({ frame: f = null } = {}) {
   if (!built) { frame = f; build(); }
   if (st && !st.ended) return; // (a re-render of the same page: the run goes on)
   st = null;
+  if (backToEnd()) return;
   renderStart();
+}
+
+// ---------- back to a run's review ----------
+// An end screen is noted in its own history entry ({ rushEnd: the run's time, look: the puzzle open large, y: the scroll }),
+// so Back from a puzzle opened there (or from any page) shows it again as it was left, and a fresh visit to Rush doesn't.
+// ended: the run just played, which then keeps Play again and its best; after a reload it is one of the recent runs.
+let ended = null; // { rec, s, post }
+const onRush = () => /^#\/rush\/?$/.test(location.hash);
+function note(x) { if (onRush()) try { history.replaceState(x ? { rushEnd: x } : null, ''); } catch {} }
+const noted = () => { const x = onRush() && history.state?.rushEnd; return x && typeof x === 'object' ? x : null; };
+function backToEnd() {
+  const x = noted();
+  if (!x) return false;
+  const mine = ended?.rec.t === x.t ? ended : null;
+  const list = pastRuns(), i = list.findIndex((r) => r.t === x.t), rec = mine?.rec ?? list[i];
+  if (!rec) { note(null); return false; } // (its history was cleared since)
+  st = mine?.s ?? null;
+  showEnd(rec, st, mine ? null : i, x);
+  if (mine) showBest(...(mine.post || [null, null, mine.s]));
+  return true;
 }
 
 async function renderStart() {
   closeLook();
+  note(null);
   section('rush-start');
   const mode = modeChoice();
   $('#rush-start').innerHTML = `<h1 tabindex="-1">Rush</h1>
@@ -220,7 +242,7 @@ async function fetchSpare(mode) {
   const q = { quiet: true };
   const a = await api(`/api/rush/run?mode=${mode}&size=${R.SIZE}`, null, q).catch(() => null);
   if (!a?.puzzles?.length) return null;
-  const one = { v: 1, mode, token: a.run, pages: [{ start: a.start, ids: a.puzzles.map((p) => p.id), sig: a.sig }], puzzles: a.puzzles };
+  const one = { v: R.SPARE_V, mode, token: a.run, pages: [{ start: a.start, ids: a.puzzles.map((p) => p.id), sig: a.sig }], puzzles: a.puzzles };
   for (let i = 1; i < R.SPARE_PAGES; i++) {
     const b = await api(`/api/rush/run?mode=${mode}&size=${R.SIZE}&run=${encodeURIComponent(a.run)}&start=${one.puzzles.length}&exclude=${one.puzzles.map((p) => p.id).join(',')}`, null, q).catch(() => null);
     if (!b?.puzzles?.length) break; // one page is still a run
@@ -303,6 +325,7 @@ const bestTable = (b) => (b?.today == null && b?.week == null && b?.all == null 
 
 // ---------- the run ----------
 async function startRun() {
+  note(null); // (Back to a run left in the middle isn't the last run's review)
   const mode = modeChoice(), g = ++gen, go = $('#rush-go');
   if (go) { go.disabled = true; go.textContent = !board.frameUp ? 'Loading board…' : 'Loading…'; }
   // Start waits for the board (PTN Ninja up and answering: ninja.js MS.up at most), so the clock never starts without it
@@ -891,7 +914,9 @@ async function endRun(wrong = null, played = false) {
 }
 // The end screen for a run: s, the run just played (Play again, its best and the post's answer to come), or null for
 // one from the recent runs (when it was played, Back only; at, its row there, which Back gives the focus to).
-function showEnd(rec, s, at = null) {
+function showEnd(rec, s, at = null, was = null) {
+  if (s && ended?.s !== s) ended = { rec, s, post: null };
+  note({ ...(was || {}), t: rec.t });
   const sum = rec.sum, mode = rec.mode, played = R.timePlayed(rec); // (the engine's pauses aren't the player's)
   section('rush-end');
   paintTheme(); // (before the pictures go in: drawn in the player's theme from the start, when it is known)
@@ -910,15 +935,16 @@ function showEnd(rec, s, at = null) {
     <p class="muted rush-small">${hint}</p>
     <ol class="rush-cards" id="rush-cards">${rec.puzzles.map((r, i) => cardHTML(rec, i)).join('')}</ol>
     <dialog class="rush-dlg" id="rush-look" aria-labelledby="rush-look-h"></dialog>` : '<p class="muted">No puzzles played.</p>'}`;
-  if (rec.puzzles.length) lookBack(rec);
+  const open = rec.puzzles.length ? lookBack(rec) : null;
   // (no board: back to Start, which waits for it again, Retry reloading it first)
   if (s) $('#rush-again').onclick = () => { st = null; if (board.frameUp) return startRun(); if (board.iframe.dataset.down) board.retry(); renderStart(); startRun(); };
   $('#rush-back').onclick = () => {
     st = null; renderStart();
     (at != null && view.querySelector(`.rush-recent-row[data-i="${at}"]`) || $('#rush-go'))?.focus();
   };
-  window.scrollTo?.(0, 0);
+  window.scrollTo?.(0, was?.y > 0 ? was.y : 0);
   $('#rush-end h1').focus({ preventScroll: true });
+  if (Number.isInteger(was?.look)) open?.(was.look, was.dlg);
 }
 // A row's result: a glyph, as the strip's, with its word for screen readers.
 const resultHTML = (r) => { const m = R.resultMark(r); return `<span class="${m.cls}"><span aria-hidden="true">${m.glyph}</span><span class="sr-only">${m.sr}</span>${m.text ? ' ' + `<span${m.sr === m.text ? ' aria-hidden="true"' : ''}>${esc(m.text)}</span>` : ''}</span>`; };
@@ -972,7 +998,9 @@ function noteLink(a, q) {
 function closeLook() { const d = document.querySelector('#rush-look'); if (d?.open) d.close(); }
 function lookBack(rec) {
   const list = $('#rush-cards'), dlg = $('#rush-look'), n = rec.puzzles.length;
-  let at = -1;
+  let at = -1, leaving = false; // leaving: the dialog closes because its link was followed
+  // the puzzle left for, its dialog open or not: what Back puts back
+  const leftAt = (i, dialog) => note({ t: rec.t, y: Math.round(window.scrollY || 0), look: i, dlg: dialog });
   const btn = (i) => list.querySelector(`.rush-card[data-i="${i}"] .rush-res`);
   const show = (i) => {
     if (at >= 0) btn(at)?.setAttribute('aria-expanded', 'false');
@@ -986,7 +1014,7 @@ function lookBack(rec) {
     noteLink(dlg.querySelector('a'), q);
     // Following the link leaves this page with the dialog open: a modal dialog in a hidden page stays modal, and
     // everything outside it (the puzzle page too) stops taking clicks. Closed first (a new tab's link leaves it be).
-    dlg.querySelector('a').addEventListener('click', (e) => { if (!(e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) dlg.close(); });
+    dlg.querySelector('a').addEventListener('click', (e) => { if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; leaving = true; leftAt(i, true); dlg.close(); });
     $('#rush-look-x').onclick = () => dlg.close();
     $('#rush-look-prev').onclick = () => go(-1);
     $('#rush-look-next').onclick = () => go(1);
@@ -994,7 +1022,7 @@ function lookBack(rec) {
   };
   // (Previous or Next turned off at the end of the run: the focus moves to the other, not out of the dialog)
   const go = (d) => { const i = at + d; if (i < 0 || i >= n) return; show(i); (d < 0 ? (i ? $('#rush-look-prev') : $('#rush-look-next')) : (i < n - 1 ? $('#rush-look-next') : $('#rush-look-prev')))?.focus(); };
-  dlg.addEventListener('close', () => { const b = btn(at); b?.setAttribute('aria-expanded', 'false'); at = -1; b?.focus(); });
+  dlg.addEventListener('close', () => { const b = btn(at); b?.setAttribute('aria-expanded', 'false'); at = -1; b?.focus(); if (noted()?.dlg && !leaving) note({ ...noted(), dlg: false }); });
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // (the backdrop)
   dlg.addEventListener('keydown', (e) => {
     if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.target.closest?.('a')) return;
@@ -1004,11 +1032,19 @@ function lookBack(rec) {
     const i = +li.dataset.i;
     li.querySelector('.rush-res').onclick = () => { show(i); if (!dlg.open) dlg.showModal(); $('#rush-look-x').focus(); };
     noteLink(li.querySelector('a'), rec.puzzles[i]);
+    li.querySelector('a').addEventListener('click', (e) => { if (!(e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) leftAt(i, false); });
   }
+  // Back here: the same puzzle, its dialog open again if it was
+  return (i, dialog) => {
+    if (!list.querySelector(`.rush-card[data-i="${i}"]`)) return;
+    if (!dialog) return list.querySelector(`.rush-card[data-i="${i}"] a`)?.focus({ preventScroll: true });
+    show(i); if (!dlg.open) dlg.showModal(); dlg.querySelector('a')?.focus();
+  };
 }
 // The end screen's line for a run the board ended (boardDied)
 export const BOARD_ENDED = 'The board (PTN Ninja) stopped answering, so this run ended. It isn’t kept, and doesn’t count against you.';
 async function showBest(r, mode, s, out = null) {
+  if (ended?.s === s) ended.post = [r, mode, s, out]; // (the answer may come while another page is up)
   if (st !== s) return;
   const best = r?.best ?? await bestFor();
   if (st !== s) return;

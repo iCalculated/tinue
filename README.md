@@ -1,6 +1,6 @@
 # tinue
 
-A Lichess-style puzzle trainer for [Tak](https://ustak.org). You get a puzzle near your rating, the opponent
+A Lichess-style puzzle trainer for [Tak](https://ustak.org), at https://tinue.me (API: https://api.tinue.me). You get a puzzle near your rating, the opponent
 answers your moves automatically, any move that still forces the win counts, and both you and the puzzle
 are re-rated after your first attempt.
 
@@ -57,16 +57,18 @@ from older clients). It should run on the smallest VPS.
 Code and puzzles ship separately. Every script takes `--dry-run` (or `DRY_RUN=1`): it prints each ssh, rsync and
 destructive step instead of running it. `scripts/test-deploy.mjs` (in `npm test`) runs them all against a fake crux.
 
-- **Everything, in order:** `SITE=$HOME/Projects/site scripts/ship.sh [--puzzles] [--no-push] [--legacy]`.
-  1. API code to crux (`deploy-crux.sh`).
+- **Everything, in order:** `SITE=<staging> PAGES=<staging>/tinue TINUE_HOST=user@host scripts/ship.sh [--puzzles] [--no-push]`
+  ships https://tinue.me, https://api.tinue.me and https://stats.tinue.me.
+  1. API code to the host (`deploy-ovh.sh`).
   2. With `--puzzles`, new and changed puzzle rows (`publish-puzzles.sh`); otherwise skipped.
   3. The static client: `build-static.sh` into `$SITE`, then publish it (`publish-site.sh`; `--no-push`
      commits without pushing). Before anything ships, the source goes to its public repository (`push-source.sh`), and it refuses unless `$SITE` is on `main` with nothing unpushed,
      since the push sends the whole branch.
-  4. `check-public.sh`: the Cloudflare host failing fails the ship; a Funnel relay failing is only a warning.
+  4. `check-public.sh`: https://api.tinue.me or the older API name failing fails the ship.
 
   API first: open tabs keep calling whatever API is up, so it has to stay compatible with them anyway.
-- **API code only:** `scripts/deploy-crux.sh`. Writes `deploy/revision.json` (commit, and a hash of any uncommitted
+- **API code only:** `TINUE_HOST=user@host scripts/deploy-ovh.sh` (`ops/README.md`). The host before it, crux, is fenced off; its script,
+  `scripts/deploy-crux.sh`, writes `deploy/revision.json` (commit, and a hash of any uncommitted
   diff), rsyncs `package.json`, `server/`, `shared/`, `public/` and `scripts/` (not `scripts/archive/` or `dev/`),
   writes the launchd plist (`MIN_BUILD`, `BOOK_VER` and `JUDGE` from `scripts/deploy-lib.sh`), restarts
   `com.shy.tinue`, waits up to 30 s for `/api/stats` on crux itself, and keeps Funnel on 8443 only. It never writes a
@@ -80,8 +82,8 @@ destructive step instead of running it. `scripts/test-deploy.mjs` (in `npm test`
   `com.shy.tinue`, copy the snapshot over `data/tinue.db` (remove `-wal`/`-shm`), start it; attempts since are lost.
   Hand grades (`scripts/grade-overrides.jsonl`) reach crux with the code and apply, to every row, at crux's next
   import (a publish with nothing to ship runs none).
-- **Static client only:** `scripts/push-source.sh`, then `SITE=$HOME/Projects/site scripts/build-static.sh`, then
-  `SITE=$HOME/Projects/site scripts/publish-site.sh tinue '<what>'`. The beta: `build-beta.sh`, then `publish-site.sh tinue-beta '<what>'`.
+- **Static client only:** `scripts/push-source.sh`, then `DOMAIN=tinue.me SITE=<staging> scripts/build-static.sh`, then
+  `PAGES=<staging>/tinue TINUE_HOST=user@host scripts/publish-site.sh tinue '<what>'`. The beta: `build-beta.sh`, then the same for `tinue-beta`.
 
   `SITE` has no default: for a test build, point it at a scratch directory. A lock stops two builds writing into
   the same directory at once.
@@ -93,8 +95,8 @@ destructive step instead of running it. `scripts/test-deploy.mjs` (in `npm test`
 
 The static build:
 - copies `public/` and the shared modules;
-- points `config.js` at the crux API;
-- stamps every script/style URL (Pages lets browsers cache for ~10 min);
+- points `config.js` at https://api.tinue.me;
+- stamps every script/style URL, so a file kept by a browser is never an old one;
 - writes a page per puzzle so links unfurl in Discord;
 - checks that every imported module was copied.
 
@@ -107,16 +109,15 @@ committing.
   private repository; `scripts/hooks/pre-push` keeps the older commits out (install it: `cp scripts/hooks/pre-push .git/hooks/`).
 - **The built page:** branch `site` of the same repository (the beta: branch `beta`), unrelated to `main`, with the page
   at its root. `version.json` names the source commit.
-- **The site:** the repository behind shydrie.xyz holds those branches as submodules, `tinue` and `tinue-beta`. GitHub
-  Pages fetches submodules over https from public repositories only, so this repository has to stay public.
-- **Roll back the page:** in the site repository, `git revert --no-edit <the pointer commit> && git push`, then
-  `git submodule update tinue`. The next publish builds on the tip of `site` whatever the pointer says.
+- **The site:** https://tinue.me serves branch `site` (and https://tinue.me/beta/ branch `beta`) from the same Linux host as the
+  API, behind Cloudflare. The old address, shydrie.xyz/tinue/, hands its players over to tinue.me.
+- **Roll back the page:** on the host, `sh /srv/tinue/ops/page.sh site --back`. The next publish builds on the tip of `site` all the same.
 
 ### tinue.me
 
 `DOMAIN=tinue.me` makes `scripts/build-static.sh` build for its own domain (API at api.tinue.me, `CNAME`, `404.html`); without
-it nothing changes. `PAGES=$SITE/tinue sh scripts/publish-site.sh tinue` pushes that build to branch `site`, which GitHub
-Pages serves itself. The old address then gets the handoff page: `scripts/build-moved.sh` on the last build made for it,
+it nothing changes. `PAGES=$SITE/tinue sh scripts/publish-site.sh tinue` pushes that build to branch `site`; with `TINUE_HOST` set the host
+serves it at once (GitHub Pages keeps a spare copy). The old address then gets the handoff page: `scripts/build-moved.sh` on the last build made for it,
 and `publish-site.sh tinue-moved` (branch `moved`, then the pointer). It brings a visitor's player, settings and unsent
 results to the new address once, encrypted for a one-use key the new page makes (`moved/import.js` says how), and forwards
 old links. Tests: `scripts/test-handoff.mjs`, and `scripts/e2e-handoff.mjs` in headless Chrome. The server's side: `ops/README.md`.
@@ -245,10 +246,8 @@ hash of the client IP, user id), rotated at 5 MB. The browser abandons a stalled
 once) and reports any request that took it over 2 s to `POST /api/slow`, logged as `SLOW-CLIENT`. A
 `SLOW-CLIENT` line with no slow server line next to it means the time went to the network, not the server.
 
-Latency: visitors reach crux through a Cloudflare Tunnel (`tinue-api.shydrie.xyz`; TLS ends at Cloudflare's edge near
-the player, so a new connection costs ~0.1 s). Tailscale Funnel (`crux.tail5ed24.ts.net:8443`) stays up for old builds,
-bots and old shared links; its relays cost ~0.4–1.2 s per new connection on a good day and several seconds on a bad
-one, which is why the site moved off it (2026-11-16). The client hides most of what's left: the static page
+Latency: visitors reach the API at `api.tinue.me` through Cloudflare (TLS ends at its edge near the player). An older API
+name still answers, for old builds, bots and shared links (`ops/README.md`). The client hides most of what's left: the static page
 preconnects to the API while its modules load, startup requests (`/api/me`, `/api/themes`, `/api/next`) go out
 together, and preflights are cached for 2 h. The next puzzle never waits: while you play one, `/api/next?for=<id>`
 picks what follows it both ways (at the rating a solve or a miss will leave), the result chooses, and the chosen one is
@@ -300,8 +299,7 @@ first and Placement only are our own.
 7. **"Only move" / non-tinue puzzles.** Positions where exactly one move keeps a winning eval (needs an
    evaluation engine — Tiltak WASM), plus "tinuë avoidance" defense puzzles.
 8. **Accounts.** Google sign-in on top of the current token accounts; rating-history graph exists.
-9. **Deploy.** Done: the API runs on crux behind a Cloudflare Tunnel (`tinue-api.shydrie.xyz`), with Tailscale
-   Funnel as a second path (see Deploying and Logs).
+9. **Deploy.** Done: https://tinue.me and https://api.tinue.me, a Linux host behind Cloudflare (see Deploying and Logs).
 
 ## License
 

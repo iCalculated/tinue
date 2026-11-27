@@ -1,9 +1,9 @@
 // Talking to the puzzle server: api() with its timeouts and retries, the slow-request beacon, the server notice
 // (slow or unreachable) that replaces the turn card, browser storage and the login token.
 
-// The API can live elsewhere (static page on shydrie.xyz, API on crux): config.js sets TINUE_API.
+// The API can live elsewhere (static page on tinue.me, API on api.tinue.me): config.js sets TINUE_API.
 // Auth is a bearer token from localStorage. The server also sets a cookie (used by same-origin dev; on
-// tinue-api.shydrie.xyz it is same-site with the page and gets sent too), but honours it only from allowed origins
+// api.tinue.me it is same-site with the page and gets sent too), but honours it only from allowed origins
 // (server.js userFrom), and the bearer token wins when both arrive.
 export const API = (window.TINUE_API || '').replace(/\/$/, '');
 

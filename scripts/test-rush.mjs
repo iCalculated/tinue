@@ -319,8 +319,8 @@ await test('offline: spare runs (age, per-mode count, size), the result queue (r
   const D = 864e5, now = 100 * D;
   const tok = (t) => t.toString(36) + '.aaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbb';
   assert.equal(R.tokenTime(tok(now)), now); assert.equal(R.tokenTime('x'), null); assert.equal(R.tokenTime(null), null);
-  const spare = (mode, t, extra = {}) => ({ v: 1, mode, token: tok(t), pages: [{ start: 0, ids: [P6.id], sig: 'x'.repeat(22) }], puzzles: [P6], ...extra });
-  assert.ok(R.validSpare(spare('rush', now)));
+  const spare = (mode, t, extra = {}) => ({ v: R.SPARE_V, mode, token: tok(t), pages: [{ start: 0, ids: [P6.id], sig: 'x'.repeat(22) }], puzzles: [P6], ...extra });
+  assert.ok(R.validSpare(spare('rush', now))); assert.equal(R.validSpare(spare('rush', now, { v: 1 })), false, 'fetched before flat wins left Rush');
   for (const b of [spare('storm', now), spare('rush', now, { token: 'nope' }), spare('rush', now, { pages: [] }), spare('rush', now, { puzzles: [] }),
     spare('rush', now, { puzzles: [{ ...P6, size: 5 }] }), spare('rush', now, { puzzles: [{ ...P6, tree: null }] }), spare('rush', now, { v: 0 }), null, 'x'])
     assert.equal(R.validSpare(b), false, JSON.stringify(b)?.slice(0, 80));
@@ -1198,8 +1198,8 @@ await test('cleanRun: a long streak is kept, its times capped, not refused', () 
 // ---------- the pool, on a database of its own ----------
 await test('pool: 6×6 only; served puzzles first, every pickable one when too few are served; never a flawed puzzle; checked again on the way out', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, gid TEXT UNIQUE)');
-  const ins = db.prepare('INSERT INTO puzzles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)');
+  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT, themes TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, gid TEXT UNIQUE)');
+  const ins = db.prepare('INSERT INTO puzzles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)');
   // 6×6: 20 served, 200 reserve conversions (one flawed); minServed 10 -> the served ones only. 5×5 ones are never used.
   for (let i = 0; i < 20; i++) ins.run('s6_' + i, 6, P6.tps, 2, 7, JSON.stringify(P6.tree), 1000 + i * 50, null, 1, null, null, 'served', null);
   for (let i = 0; i < 200; i++) ins.run('r6_' + i, 6, P6.tps, 2, 7, JSON.stringify(P6.tree), 1000 + i * 5, null, 0, null, null, 'reserve', i === 0 ? 2 : null);
@@ -1233,6 +1233,26 @@ await test('pool: 6×6 only; served puzzles first, every pickable one when too f
   r = (await get('mode=rush&size=6')).o.puzzles;
   assert.equal(r.length, 19); assert.ok(!r.some((p) => p.id === 's6_3' || p.id === 's6_4'));
   assert.equal((await get('mode=rush&size=6&run=forged.aaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbb')).s, 400);
+  // a flat win is never handed out: not from a pool built before it was tagged, nor from a new one, nor when too few are served
+  db.prepare("UPDATE puzzles SET themes = 's6,gaelet,capture' WHERE id IN ('s6_5', 'r6_7')").run();
+  db.prepare("UPDATE puzzles SET themes = 's6,gaeletish' WHERE id = 's6_6'").run();
+  r = (await get('mode=rush&size=6')).o.puzzles;
+  assert.equal(r.length, 18); assert.ok(!r.some((p) => p.id === 's6_5') && r.some((p) => p.id === 's6_6'));
+  // the pool leaves it out (the page isn't just short of it), and it doesn't count toward minServed
+  const first = async (min) => { let o; await createRush(db, { now: () => t, minServed: min }).handle(null, null, new URL('http://x/api/rush/run?mode=rush&size=6'), 'GET /api/rush/run',
+    { user: null, json: (_, st, v) => { o = v; }, refuse: () => false, ip: '1' }); return o.puzzles; };
+  assert.equal((await first(18)).length, 18); assert.equal((await first(19)).length, RUN_LEN, '18 are served: every pickable one, a whole page');
+  db.prepare("UPDATE puzzles SET themes = 'gaelet' WHERE id LIKE 'r6!_%' ESCAPE '!' AND id != 'r6_9'").run();
+  assert.equal((await first(19)).length, 19, 'the served ones and r6_9'); db.prepare("UPDATE puzzles SET themes = NULL WHERE id LIKE 'r6!_%' ESCAPE '!' AND id != 'r6_7'").run();
+  for (const [min, mode] of [[10, 'rush'], [10, 'streak'], [30, 'rush'], [30, 'streak']]) {
+    const fresh = createRush(db, { now: () => t, minServed: min }), seen = new Set();
+    for (let k = 0; k < 6; k++) {
+      let o; await fresh.handle(null, null, new URL(`http://x/api/rush/run?mode=${mode}&size=6&exclude=${[...seen].join(',')}`), 'GET /api/rush/run',
+        { user: null, json: (_, st, v) => { o = v; }, refuse: () => false, ip: '1' });
+      for (const p of o.puzzles || []) seen.add(p.id);
+    }
+    assert.ok(seen.size > 15 && !seen.has('s6_5') && !seen.has('r6_7'), `${min} ${mode}`);
+  }
   // GET /api/rush/<anything else> isn't Rush's
   for (const route of ['GET /api/rush/foo', 'GET /api/rush/result', 'GET /api/rush/', 'POST /api/rush/run'])
     assert.equal(await rush.handle(null, null, new URL('http://x/' + route.split(' ')[1]), route, {}), false, route);
@@ -1241,8 +1261,8 @@ await test('pool: 6×6 only; served puzzles first, every pickable one when too f
 
 await test('a run token lives 30 days: paged and posted after 29, refused after 31', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, rating REAL, gid TEXT)');
-  const ins = db.prepare("INSERT INTO puzzles VALUES (?,6,?,2,7,?,?,NULL,1,NULL,NULL,'served',NULL,NULL)");
+  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT, themes TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, rating REAL, gid TEXT)');
+  const ins = db.prepare("INSERT INTO puzzles VALUES (?,6,?,2,7,?,?,NULL,1,NULL,NULL,'served',NULL,NULL,NULL)");
   for (let i = 0; i < 200; i++) ins.run('q' + i, P6.tps, JSON.stringify(P6.tree), 1000 + i * 10);
   let t = 1e12;
   const rush = createRush(db, { now: () => t, minServed: 10 });
@@ -1266,8 +1286,8 @@ await test('a run token lives 30 days: paged and posted after 29, refused after 
 
 await test('played time: minted_at, played_at clamped between it and the post, late after 10 minutes; units stored', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, rating REAL, gid TEXT)');
-  const ins = db.prepare("INSERT INTO puzzles VALUES (?,6,?,2,7,?,?,NULL,1,NULL,NULL,'served',NULL,NULL)");
+  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT, themes TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, rating REAL, gid TEXT)');
+  const ins = db.prepare("INSERT INTO puzzles VALUES (?,6,?,2,7,?,?,NULL,1,NULL,NULL,'served',NULL,NULL,NULL)");
   for (let i = 0; i < 100; i++) ins.run('q' + i, P6.tps, JSON.stringify(P6.tree), 1000 + i * 10);
   let t = 1e12;
   const rush = createRush(db, { now: () => t, minServed: 10 });
@@ -1295,8 +1315,8 @@ await test('played time: minted_at, played_at clamped between it and the post, l
 
 await test('top lists: named accounts, token guests and tokenless visitors; one row each; never an abandoned run; "you"', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT UNIQUE, rating REAL, gid TEXT UNIQUE)');
-  const ins = db.prepare("INSERT INTO puzzles VALUES (?,6,?,2,7,?,?,NULL,1,NULL,NULL,'served',NULL,NULL)");
+  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT, themes TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT UNIQUE, rating REAL, gid TEXT UNIQUE)');
+  const ins = db.prepare("INSERT INTO puzzles VALUES (?,6,?,2,7,?,?,NULL,1,NULL,NULL,'served',NULL,NULL,NULL)");
   for (let i = 0; i < 100; i++) ins.run('q' + i, P6.tps, JSON.stringify(P6.tree), 1000 + i * 10);
   db.exec("INSERT INTO users (id, name, rating, gid) VALUES (1, 'ann', 1500, NULL), (2, NULL, 1500, NULL), (3, 'cat', 1500, NULL)");
   let t = 1e12;
@@ -1349,7 +1369,7 @@ await test('top lists: named accounts, token guests and tokenless visitors; one 
 
 await test('top lists: an older database is filled from its runs once (best per player, abandoned runs left out)', () => {
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, rating REAL, gid TEXT UNIQUE)');
+  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT, themes TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, rating REAL, gid TEXT UNIQUE)');
   createRush(db);
   db.exec('DROP TABLE rush_lead');
   const run = db.prepare("INSERT INTO rush_runs (user_id, gid, mode, size, score, moves, errors, best_combo, ms, day, week, ts, abandoned) VALUES (?,?,'rush',6,?,0,0,0,0,'d','w',?,?)");
@@ -1361,7 +1381,7 @@ await test('top lists: an older database is filled from its runs once (best per 
 
 await test('best scores: two indexed lookups, not a scan of every run', () => {
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, gid TEXT UNIQUE)');
+  db.exec('CREATE TABLE puzzles (id TEXT PRIMARY KEY, size INTEGER, tps TEXT, komi REAL, plies INTEGER, tree TEXT, rating REAL, swing TEXT, turn INTEGER, grade TEXT, kind TEXT, status TEXT, flaw INTEGER, meta TEXT, themes TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, gid TEXT UNIQUE)');
   createRush(db);
   const plan = (sql) => db.prepare('EXPLAIN QUERY PLAN ' + sql).all().map((r) => r.detail).join('; ');
   const args = (sql) => sql.replace(/\?/g, () => "''");

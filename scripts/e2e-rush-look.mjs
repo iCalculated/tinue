@@ -98,6 +98,8 @@ const expanded = () => ev(`[...document.querySelectorAll('.rush-card .rush-res')
 // the end screen of the stored run, opened from the recent runs
 async function openRun() {
   await ev(`location.hash = '#/rush'; 1`);
+  await sleep(200);
+  await ev(`(document.querySelector('#view-rush:not(.hidden) #rush-end:not(.hidden) #rush-back')?.click(), 1)`); // (Back may have put a review there)
   await until(`!!document.querySelector('.rush-recent-row')`, 'the recent runs');
   assert.ok(await clickOn('.rush-recent-row'), 'the recent run takes the click');
   await until(`document.querySelectorAll('.rush-card').length === 6`, 'six cards');
@@ -135,12 +137,47 @@ try {
     assert.equal(await ev(`document.querySelectorAll(':modal').length`), 0);
     assert.ok(await clickOn('#view-puzzle button:not([disabled])'), 'a button on the puzzle page takes the click');
   });
-  await step('the browser\'s Back to Rush: its buttons take clicks', async () => {
-    await ev('history.back(); 1');
-    await until(`location.hash === '#/rush' && !document.querySelector('#view-rush').classList.contains('hidden')`, 'Rush again');
-    await sleep(300);
+  const back = async (what) => { await ev('history.back(); 1'); await until(`location.hash === '#/rush' && !document.querySelector('#view-rush').classList.contains('hidden')`, what); await sleep(300); };
+  const review = () => ev(`(() => { const e = document.querySelector('#rush-end'); return !e.classList.contains('hidden') && e.querySelectorAll('.rush-card').length; })()`);
+  await step('the browser\'s Back: the run\'s review, on the puzzle that was open; it and the page take clicks', async () => {
+    await back('Rush again');
+    assert.equal(await review(), 6); assert.deepEqual([(await dlg()).open, /^Puzzle 2 of 6/.test((await dlg()).h)], [true, true]);
+    assert.equal(await ev(`document.activeElement.closest('#rush-look a') != null`), true);
+    await key('ArrowRight', 'ArrowRight'); // (from the link: the dialog stays on its puzzle)
+    assert.ok(await clickOn('#rush-look-next')); assert.match((await dlg()).h, /^Puzzle 3 of 6/);
+    // on to the next puzzle, and back to it; then Forward and Back
+    assert.ok(await clickOn('#rush-look a')); await until(`!document.querySelector('#view-puzzle').classList.contains('hidden')`, 'the puzzle');
+    await back('Rush, third puzzle'); assert.match((await dlg()).h, /^Puzzle 3 of 6/);
+    await ev('history.forward(); 1'); await until(`!document.querySelector('#view-puzzle').classList.contains('hidden')`, 'Forward'); await sleep(200);
     assert.equal(await ev(`document.querySelectorAll(':modal').length`), 0);
-    assert.ok(await clickOn('#view-rush button:not([disabled])'), 'a button on Rush takes the click');
+    await back('Rush once more'); assert.match((await dlg()).h, /^Puzzle 3 of 6/);
+    await key('Escape', 'Escape'); assert.equal((await dlg()).open, false);
+    assert.equal(await ev(`history.state.rushEnd.dlg`), false);
+  });
+  await step('a card\'s own link: Back puts the scroll and the focus back, no dialog; after a reload too', async () => {
+    await ev(`document.body.style.minHeight = '4000px'; scrollTo(0, 400); 1`);
+    const y = await ev(`(document.querySelector('.rush-card[data-i="4"] .rush-card-meta a').click(), Math.round(scrollY))`);
+    await until(`!document.querySelector('#view-puzzle').classList.contains('hidden')`, 'the puzzle'); await sleep(200);
+    await back('the review');
+    assert.equal(await review(), 6); assert.equal((await dlg()).open, false);
+    assert.equal(await ev(`document.activeElement.closest('.rush-card')?.dataset.i`), '4');
+    assert.ok(Math.abs(await ev('scrollY') - y) < 3, 'the scroll');
+    await ev(`document.querySelector('.rush-card[data-i="4"] .rush-card-meta a').click(); 1`);
+    await until(`!document.querySelector('#view-puzzle').classList.contains('hidden')`, 'the puzzle'); await sleep(200);
+    await cdp('Page.reload'); await sleep(300); await until(`document.readyState === 'complete' && !!document.querySelector('#view-puzzle')`, 'reloaded'); await sleep(500);
+    await back('the review after a reload'); await until(`document.querySelectorAll('.rush-card').length === 6`, 'its cards');
+  });
+  await step('a fresh visit to Rush is the start screen, and so is Back once the review was closed', async () => {
+    await ev(`location.hash = '#/settings'; 1`); await sleep(200); await ev(`location.hash = '#/rush'; 1`); await sleep(300);
+    assert.equal(await review(), false); await until(`!!document.querySelector('.rush-recent-row')`, 'the start screen');
+    await openRun(); await ev(`document.querySelector('#rush-back').click(); 1`); await sleep(100);
+    await ev(`location.hash = '#/settings'; 1`); await sleep(200); await back('Rush');
+    assert.equal(await review(), false);
+    // a run whose history was cleared has no review to go back to
+    await openRun(); await ev(`location.hash = '#/settings'; 1`); await sleep(200);
+    const kept = await ev(`localStorage.getItem('tinue.rushHistory')`); await ev(`localStorage.removeItem('tinue.rushHistory'); 1`);
+    await back('Rush'); assert.equal(await review(), false);
+    await ev(`localStorage.setItem('tinue.rushHistory', ${JSON.stringify(kept)}); location.hash = '#/settings'; 1`); await sleep(200);
   });
   await step('another route with the dialog open (leave()): closed, and that page takes clicks', async () => {
     await openRun();
