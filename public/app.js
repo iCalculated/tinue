@@ -2488,7 +2488,7 @@ function setSetting(key, value, from = 'here') {
   } else if (key === 'sound') {
     sound.setEnabled(soundOn(prefs)); sound.setVoice(soundOf(prefs));
     if (from === 'here' && soundOn(prefs)) { sound.unlock(); setTimeout(() => sound.play('flatBoard'), 60); } // a preview in the chosen voice (the change is a gesture)
-  } else if (key === 'ninja') board.setLook(prefs.ninja || '');
+  } else if (key === 'ninja') { board.setLook(prefs.ninja || ''); example?.relook(); }
   showSettings();
   if (from === 'here') pushSettings();
   return true;
@@ -2578,6 +2578,7 @@ function settingsPage() {
     const sel = (k, label, desc, extra = '') => `<div class="set-item"><label for="st-${k}">${label}</label><select id="st-${k}"${desc ? ` aria-describedby="st-${k}-d"` : ''}></select>
       ${desc ? `<p class="set-desc" id="st-${k}-d">${desc}</p>` : ''}${extra}</div>`;
     el.innerHTML = `<h1>Settings</h1><p class="set-status" id="st-status" role="status"></p>
+      <div class="panel set-ex" id="st-example"></div>
       <div class="panel set-list">
         <p class="set-desc set-note hidden" id="st-note"></p>
         <div class="set-item"><label for="st-ninja-theme">Board theme</label><select id="st-ninja-theme">
@@ -2609,7 +2610,18 @@ function settingsPage() {
     renderLookField(true);
   }
   showSettings();
+  showExample();
 }
+// The example board (example-board.js), loaded on the first visit. It borrows PTN Ninja's frame, so it goes with the page.
+let example = null, exampleOn = false;
+async function showExample() {
+  exampleOn = true;
+  try {
+    if (!example) { const m = await import('./example-board.js'); example ||= new m.ExampleBoard($('#st-example'), board); }
+    if (exampleOn) example.enter();
+  } catch (e) { console.warn(e); $('#st-example')?.remove(); }
+}
+function leaveExample() { exampleOn = false; example?.leave(); }
 // The look field. fresh: show what is in use (else a message about the last paste stays).
 function renderLookField(fresh = false) {
   const inp = $('#st-ninja');
@@ -2858,6 +2870,7 @@ async function route() {
   // A Rush row's one-shot note for this navigation only (rush.js lookFrom): read and cleared on every route.
   let look = null; try { look = JSON.parse(sessionStorage.getItem('tinue.lookFrom')); sessionStorage.removeItem('tinue.lookFrom'); } catch {}
   if (page !== 'rush') rushPage?.leave(); // a run in progress ends unposted (rush.js)
+  if (page !== 'settings') leaveExample(); // (before Rush, which borrows the same frame)
   if (page !== 'sounds') labPage?.leave(); // the lab's previews stop and its own audio context closes
   if (page === 'me' || page === 'leaderboard' || page === 'rush' || page === 'settings') showHashURL('#/' + (location.hash || '#/' + pathRoute).split('/').slice(1).join('/'));
   if (page === 'glossary') showHashURL('#/'); // (the Glossary page, until 2026-11-24: its old links land on the puzzle)

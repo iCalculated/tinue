@@ -604,6 +604,14 @@ export class NinjaBoard {
   }
   // Rush's board box: the shape of PTN Ninja's board as frameBox cuts it on the puzzle page (a 3D look: the whole frame).
   _size(size) { const g = frameGeom(this.look || {}, size); this.el.style.aspectRatio = String(g ? g.ratio : 1 / 1.3); }
+  // The lender's look changed while the frame is lent (the Settings page's example): the frame and its box take it now.
+  relook() {
+    if (this.dead || !this.borrowed) return;
+    this.look = this.lender.look;
+    this._size(this.games[0].size);
+    this._greet();
+    this._place(true);
+  }
   // Over Rush's board box (this.el), in the document's own coordinates (index.html's #board and its wrap are made static
   // while lent, style.css .lend, so the frame is placed against the page and scrolls with it): PTN Ninja's board, as
   // frameBox cuts it on the puzzle page, as large as fits in the box and centred there; the frame clipped to that box,
