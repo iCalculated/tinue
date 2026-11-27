@@ -164,9 +164,15 @@ button.tag:hover, button.tag[aria-expanded="true"] { border-color: var(--accent)
 .set-status { color: var(--muted); font-size: var(--fs-sm); margin: 0 0 12px; min-height: 1.4em; }
 .set-list { display: flex; flex-direction: column; gap: 0; padding-top: 4px; padding-bottom: 4px; }
 .set-item { display: grid; grid-template-columns: minmax(0, 1fr) 200px; grid-template-areas: "label ctl" "desc desc"; column-gap: 16px; row-gap: 4px; align-items: center; padding: 12px 0; }
-.set-item.set-theme { grid-template-areas: "label ex" "ctl ex"; grid-template-rows: auto 1fr; align-items: start; }
+.set-item.set-theme { grid-template-areas: "label ex" "ctl ex" "sub ex"; grid-template-rows: auto auto 1fr; align-items: start; }
+.set-sub { grid-area: sub; display: grid; gap: 6px; margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--line); min-width: 0; }
+.set-sub > label { color: var(--fg-hi); font-size: var(--fs-xs); }
+.set-sub .set-look { flex-wrap: wrap; }
+.set-sub .set-look input { flex: 1 1 100%; }
 .set-theme > select { max-width: 200px; }
-.set-ex { grid-area: ex; position: relative; }
+.set-ex { grid-area: ex; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.set-ex-box { position: relative; width: 100%; }
+.set-ex-reset { font-size: var(--fs-xs); }
 .set-ex .board-host { background: #262421; border-radius: var(--corner, 6px); aspect-ratio: 0.79045; } /* (as Rush's) */
 .set-ex-msg { position: absolute; inset: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; text-align: center; padding: 8px; color: var(--muted); font-size: var(--fs-xs); }
 .set-ex-msg:empty { display: none; }
@@ -181,7 +187,8 @@ button.tag:hover, button.tag[aria-expanded="true"] { border-color: var(--accent)
 .set-look input { flex: 1 1 auto; min-width: 0; }
 @media (max-width: 560px) {
   .set-item { grid-template-columns: minmax(0, 1fr) 170px; }
-  .set-item.set-theme { grid-template-columns: minmax(0, 1fr) min(170px, 46vw); }
+  .set-item.set-theme { grid-template-columns: minmax(0, 1fr) min(170px, 46vw); grid-template-areas: "label ex" "ctl ex" "sub sub"; grid-template-rows: auto 1fr auto; }
+  .set-sub { margin-top: 0; }
   .set-look { flex-wrap: wrap; }
   .set-look input { flex-basis: 100%; }
   .set-look button { flex: 1 1 0; }
