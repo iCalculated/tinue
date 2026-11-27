@@ -156,7 +156,7 @@ const chevron = (sel) => ev(`(() => { const s = document.querySelector(${JSON.st
   return [c.appearance, c.backgroundImage.startsWith('url("data:image/svg+xml'), c.backgroundRepeat, c.backgroundPositionX, c.backgroundPositionY, c.backgroundSize, c.paddingRight].join(' '); })()`);
 const CHEVRON = 'none true no-repeat calc(100% - 10px) 50% 10px 6px 28px';
 async function chevrons(where) {
-  const ids = await ev(`[...document.querySelectorAll('select')].filter((s) => s.offsetParent).map((s) => '#' + s.id)`);
+  const ids = await ev(`[...document.querySelectorAll('select')].filter((s) => s.offsetParent && s.checkVisibility({ visibilityProperty: true })).map((s) => '#' + s.id)`);
   assert.ok(ids.length >= 2, where + ': dropdowns found');
   for (const sel of ids) {
     assert.equal(await chevron(sel), CHEVRON, where + ' ' + sel);
@@ -543,6 +543,13 @@ try {
     await said('f5'); assert.equal(await reset(), '', 'playable again'); await hop('#/leaderboard', '#/settings');
     await until(`!!document.querySelector('#st-example .lent')`, 'back'); assert.equal(await reset(), 'hidden');
     assert.notEqual(await ev('document.activeElement.tagName'), 'IFRAME', 'the keyboard stays with the page');
+    // a move still on its way as the page is left, or as Reset is pressed, isn't the next position's
+    const results = () => (fs.existsSync(LOG) ? fs.readFileSync(LOG, 'utf8').split('\n').filter((l) => l.includes('POST /api/result')).length : 0), r0 = results();
+    const late = (go) => ev(`(() => { const w = document.querySelector('#board iframe').contentWindow; w.postMessage({ action: 'INSERT_PLY', value: 'f5' }, 'https://ptn.ninja'); ${go}; return true; })()`);
+    await late(`document.querySelector('.set-ex-reset').click()`); await sleep(600); assert.equal(await reset(), 'hidden', 'Reset wins');
+    await said('f5'); assert.equal(await reset(), '', 'and the board still plays'); await sleep(200);
+    await late(`location.hash = '#/'`); await sleep(1500); assert.equal(results(), r0, 'no result from a late move');
+    await hop('#/settings'); await until(`!!document.querySelector('#st-example .lent')`, 'back');
     ninjaMode = 'slow:4000';
     await cdp('Page.navigate', { url: BASE + '/?ex2#/settings' }); await sleep(800); await hop('#/', '#/settings', '#/', '#/settings');
     await until(`!!document.querySelector('#st-example .lent')`, 'the example after hopping', 12000); await sleep(4000);

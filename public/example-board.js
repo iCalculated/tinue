@@ -15,13 +15,16 @@ export const examplePTN = () => buildPTN({ size: 6, komi: KOMI, tps: EXAMPLE.tps
 export class ExampleBoard {
   constructor(el, frame) {
     this.frame = frame; this.gen = 0; this.on = false;
-    el.innerHTML = '<div class="set-ex-box"><div class="board-host"></div><p class="set-ex-msg" role="status"></p></div><button type="button" class="link set-ex-reset">Reset</button>';
+    el.innerHTML = '<div class="set-ex-box"><div class="board-host"></div><p class="set-ex-msg" role="status"></p></div><button type="button" class="link set-ex-reset" aria-label="Reset the example board">Reset</button>';
     this.msg = el.querySelector('.set-ex-msg');
-    this.board = frame.lend(el.querySelector('.board-host'), { onMove: () => this.moved(), onDead: () => this.down(), steady: 700, zoom: 2 });
+    this.board = frame.lend(el.querySelector('.board-host'), { onMove: () => this.moved(), onDead: () => this.down(), steady: 700, zoom: 2, guard: true });
     // (dropOnStray: the page keeps the keyboard, so the board never takes it from the look field)
     this.board.ui({ disableBoard: false, dropOnStray: true });
     this.reset = el.querySelector('.set-ex-reset');
-    this.reset.onclick = () => this.draw();
+    this.reset.onclick = (e) => {
+      if (!e.detail) el.closest('.set-item')?.querySelector('select')?.focus({ preventScroll: true }); // (by keyboard: it is about to hide)
+      this.draw();
+    };
     this.showReset(false);
   }
   showReset(on) { this.reset.style.visibility = on ? '' : 'hidden'; } // (its room is kept: nothing moves)

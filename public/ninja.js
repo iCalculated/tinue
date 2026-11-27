@@ -155,7 +155,7 @@ export class NinjaBoard {
       if (e.source !== f.contentWindow || this.dead) return;
       const { action, value } = e.data || {};
       if (action === 'GAME_STATE') f.dataset.up = '1';
-      if (action === 'GET_THEME') { if (e.origin === ORIGIN) heardTheme(value); this._pong?.(); }
+      if (action === 'GET_THEME') { f.themeHeard = Math.min(f.themeAsked || 0, (f.themeHeard || 0) + 1); if (e.origin === ORIGIN) heardTheme(value); this._pong?.(); (f.ninjaOwner || this)._hear(); }
       if (f.dataset.up) this._alive();
       if (this._owns()) this._heard(action, value); // (lent to Rush: the moves are Rush's)
     });
@@ -237,6 +237,7 @@ export class NinjaBoard {
     const f = this.iframe;
     if (this.dead || this.state === 'up') return;
     delete f.dataset.up; delete f.dataset.down; delete f.dataset.loaded; f.removeAttribute('tabindex');
+    f.themeAsked = f.themeHeard = 0; this.deaf = null;
     f.dataset.t0 = performance.now();
     this._reloaded = !this._resolve; // (up before: everything goes again once it is up)
     this.shown = false; f.style.opacity = '0';
@@ -288,7 +289,7 @@ export class NinjaBoard {
       const t = setTimeout(() => done(false), NinjaBoard.MS.dead);
       this._pong = () => { clearTimeout(t); done(true); };
       // (a frame taken out of the page: no answer, so down after MS.dead like a hung one)
-      try { this.iframe.contentWindow?.postMessage({ action: 'GET_THEME' }, ORIGIN); } catch {}
+      this._ask();
     });
   }
   // PTN Ninja's answer to a Rush load (seen: its GAME_STATE for the position): none within MS.dead and it has stopped
@@ -310,6 +311,7 @@ export class NinjaBoard {
     }
     else if (action === 'SET_UI' && value?.boardSize) this.resizedAt = performance.now();
     else if (action === 'SET_UI' && value?.boardTransform) store.set('ninjaTransform', value.boardTransform); // kept per browser
+    else if (action === 'INSERT_PLY' && this._isDeaf) this.deaf.dropped = true;
     else if (action === 'INSERT_PLY') this._played(typeof value === 'string' ? value : value?.ptn ?? value?.text);
     else if (action === 'UNHANDLED_KEY' && value?.key) {
       // keys PTN Ninja didn't use (arrows etc. with its navigation off) work as if pressed on the page
@@ -376,7 +378,27 @@ export class NinjaBoard {
 
   // ---------- messaging ----------
   // Only to a frame that is up and owned by this board (a frame loading, down, or taken out of the page gets nothing).
-  _post(action, value) { if (!this.dead && this.available && this._owns()) this.iframe.contentWindow?.postMessage(value === undefined ? { action } : { action, value }, ORIGIN); }
+  _post(action, value) { if (action === 'GET_THEME') { if (!this.dead && this.available && this._owns()) this._ask(); return; } if (!this.dead && this.available && this._owns()) this.iframe.contentWindow?.postMessage(value === undefined ? { action } : { action, value }, ORIGIN); }
+  // Every question is counted, and so is every answer, on the frame (its boards share it): see _deafen.
+  _ask() { const f = this.iframe; f.themeAsked = (f.themeAsked || 0) + 1; try { f.contentWindow?.postMessage({ action: 'GET_THEME' }, ORIGIN); } catch {} }
+  // The frame has been sent another position, and a move made on the last one may be on its way here: until PTN Ninja
+  // answers a question sent after it, a move it reports isn't this position's, so it is dropped (and the position sent
+  // again: PTN Ninja may have played it). For MS.dead at most, when the heartbeat says whether it is there at all.
+  _deafen() {
+    if (this.dead || !this.available || !this._owns()) return;
+    this._ask();
+    this.deaf = { until: this.iframe.themeAsked, at: performance.now(), dropped: false };
+  }
+  get _isDeaf() { return !!this.deaf && performance.now() - this.deaf.at < NinjaBoard.MS.dead; }
+  _hear() {
+    const d = this.deaf;
+    if (!d || (this.iframe.themeHeard || 0) < d.until) return;
+    this.deaf = null;
+    if (!d.dropped || !this._owns()) return;
+    this._post('CANCEL_MOVE');
+    if (this.headers) { this._post('SET_CURRENT_PTN', this._line()); this._post('GO_TO_PLY', this.peeking ? { plyID: this.cur, isDone: false } : { plyID: this.cur - 1, isDone: true }); }
+    this._deafen();
+  }
   async _send(action, value) { await this.ready; this._post(action, value); }
 
   // Show the iframe only once PTN Ninja has drawn what tinue last loaded (_afterDraw) and stopped resizing (it posts
@@ -486,9 +508,10 @@ export class NinjaBoard {
     // without PTN Ninja's fly-in animation for the whole game
     await this._send('SET_UI', { animateBoard: false });
     if (!this.available || !this._owns()) return; // (down, or the frame lent: what it shows goes to PTN Ninja later, _restore)
-    this._post('HIGHLIGHT_SQUARES', []); this.hl = []; this.shapeKey = null; // (a hint's squares go with the old line)
+    this._post('HIGHLIGHT_SQUARES', []); this.hl = []; this.shapeKey = this.shapeSqs = null; // (a hint's squares go with the old line)
     this._post('SET_CURRENT_PTN', ptn);
     this._post('LAST');
+    if (this.guard) this._deafen();
     this._afterDraw(this.games[this.cur].toTPS());
     if (this.lender) await this.seenOrLost; // (Rush: the position is on PTN Ninja's board, or the run is over)
   }
@@ -530,14 +553,14 @@ export class NinjaBoard {
     if (wait < Infinity) this._lockT = setTimeout(() => { if (!this.opts.disableBoard) this.ui({ disableBoard: false }); }, wait + 1);
     return true;
   }
-  highlight(squares = []) { this.hl = squares || []; this.shapeKey = null; return this._send('HIGHLIGHT_SQUARES', this.hl); }
+  highlight(squares = []) { this.hl = squares || []; this.shapeKey = this.shapeSqs = null; return this._send('HIGHLIGHT_SQUARES', this.hl); }
   // The analysis page's shapes: PTN Ninja's embed has no arrows or rings, so line 1's squares are highlighted instead
   // (only while no hint is shown), and nothing else. An empty list clears them.
   shapes(list = []) {
     if (this.hl.length) return this.ready;
     const sqs = (list || []).find((x) => x.role === 'best')?.sqs || [], key = sqs.join(' ');
     if (key === (this.shapeKey ?? '')) return this.ready;
-    this.shapeKey = key;
+    this.shapeKey = key; this.shapeSqs = sqs;
     return this._send('HIGHLIGHT_SQUARES', sqs);
   }
   cancel() { return this._send('CANCEL_MOVE'); }
@@ -561,8 +584,9 @@ export class NinjaBoard {
   // A board on el (Rush's #rush-board, a box the frame is laid over) that plays on this frame while it has borrowed it.
   // Until borrow() and after giveBack() it only keeps track of its calls. onDead(): PTN Ninja stopped answering mid-run.
   // steady (ms): kept unseen at least this long after borrow(), until PTN Ninja's board has its size (the Settings example).
+  // guard: moves may be under way when it loads another position (_deafen), or a stack half spread when it goes.
   // zoom: drawn that many times larger and scaled down to the box (a small one: PTN Ninja's own margins don't shrink).
-  lend(el, { onMove, onDead, steady = 0, zoom = 1 } = {}) { const b = new NinjaBoard(el, { onMove, onDead, lender: this }); b.steady = steady; b.zoom = zoom; return b; }
+  lend(el, { onMove, onDead, steady = 0, zoom = 1, guard = false } = {}) { const b = new NinjaBoard(el, { onMove, onDead, lender: this }); b.steady = steady; b.zoom = zoom; b.guard = guard; return b; }
 
   _borrower(lender, onDead) {
     this.lender = lender; this.onDead = onDead;
@@ -653,7 +677,7 @@ export class NinjaBoard {
     try { this.onDead?.(); } catch (e) { console.warn(e); }
   }
   // The run is over (or left): the frame goes back to the puzzle page.
-  giveBack() { if (this.borrowed) { this.borrowed = false; this._unplace(); } }
+  giveBack() { if (this.borrowed) { if (this.guard) this._post('CANCEL_MOVE'); this.deaf = null; this.borrowed = false; this._unplace(); } }
   _unplace() {
     clearTimeout(this._beatT); this._ro?.disconnect(); this._ro = null; this._unresize?.(); this._unresize = null;
     for (const t of [this._settleTimer, this._lockT, this._animT]) clearTimeout(t);
@@ -680,7 +704,7 @@ export class NinjaBoard {
     return k ? { theme: k } : { theme: null, pending: t };
   }
   // GET_THEME, whoever has the frame (only an answer: nothing on the board changes)
-  askTheme() { if (!this.dead && this.state === 'up') try { this.iframe.contentWindow?.postMessage({ action: 'GET_THEME' }, ORIGIN); } catch {} }
+  askTheme() { if (!this.dead && this.state === 'up') this._ask(); }
 
   // The puzzle page's board has its frame back: its shape, tinue's settings and the position it was keeping (it went on
   // tracking its calls meanwhile), without the fly-in. A frame that is down shows the message in its place instead.
@@ -703,7 +727,9 @@ export class NinjaBoard {
       this._post('SET_CURRENT_PTN', this._line());
       this._post('GO_TO_PLY', this.peeking ? { plyID: this.cur, isDone: false } : { plyID: this.cur - 1, isDone: true });
     }
-    this._post('HIGHLIGHT_SQUARES', this.hl.length ? this.hl : []); this.shapeKey = null;
+    const sqs = this.hl.length ? this.hl : this.shapeSqs || [];
+    this._post('HIGHLIGHT_SQUARES', sqs); this.shapeKey = this.hl.length ? null : sqs.join(' ');
+    this._deafen();
     this._afterDraw(this.games[this.cur].toTPS());
   }
 }
