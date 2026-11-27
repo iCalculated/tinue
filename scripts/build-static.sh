@@ -115,14 +115,16 @@ if [ -n "$BETA" ]; then
   printf "window.TINUE_BETA = '%s';\n" "$(printf %s "$BETA" | tr -cd 'A-Za-z0-9@._/ -')" >> "$OUT/config.js"
   sed -i '' -E 's#(<link rel="icon")#<meta name="robots" content="noindex">\1#' "$OUT/index.html"
 fi
-# Its own domain: the address in the page's tags and links, the import of players from the old address (first in <head>,
+# The address in the page's tags and links; a beta's point at the production page.
+[ -n "$BETA" ] || sed -i '' "s#https://tinue\.me/#$SITE_URL#g" "$OUT/index.html"
+# Its own domain: the import of players from the old address (first in <head>,
 # inline: it takes the payload off the address before anything else runs), and what GitHub Pages needs.
 if [ -n "$DOMAIN" ]; then
   printf "window.TINUE_OLD = '%s';\n" "$OLD_URL" >> "$OUT/config.js"
-  DOMAIN="$DOMAIN" SITE_URL="$SITE_URL" OLD_URL="$OLD_URL" node -e "
-    const fs = require('fs'), out = process.argv[1], { DOMAIN, SITE_URL, OLD_URL } = process.env;
+  DOMAIN="$DOMAIN" OLD_URL="$OLD_URL" node -e "
+    const fs = require('fs'), out = process.argv[1], { DOMAIN, OLD_URL } = process.env;
     const js = fs.readFileSync('moved/import.js', 'utf8').replaceAll('__OLD__', OLD_URL);
-    const html = fs.readFileSync(out + '/index.html', 'utf8').replaceAll('https://shydrie.xyz/tinue/', SITE_URL), at = '<meta charset=\"utf-8\">\n';
+    const html = fs.readFileSync(out + '/index.html', 'utf8'), at = '<meta charset=\"utf-8\">\n';
     if (html.split(at).length !== 2 || js.includes('</script')) throw new Error('index.html has no place for moved/import.js');
     fs.writeFileSync(out + '/index.html', html.replace(at, () => at + '<script>\n' + js + '</script>\n'));
     fs.copyFileSync('moved/404.html', out + '/404.html');
