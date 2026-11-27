@@ -53,7 +53,7 @@
   .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 24px; }
   .stat { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; column-gap: 8px; }
   .stat .lbl { grid-column: 1 / -1; }
-  /* percentile feedback: today's line over the percentile lines of earlier days */
+  /* percentile feedback: today's line over histograms of the earlier days, one every few hours */
   .stat .pr { min-height: 37px; text-align: right; white-space: nowrap; line-height: 1.2; }
   .stat .pr strong { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); }
   .stat .pr span { display: block; font-size: 11px; }
@@ -61,7 +61,8 @@
   .pf svg { display: block; width: 100%; touch-action: pan-y; }
   .pf svg text { font-size: 10px; }
   .pf .tip { padding: 2px 6px; font-size: 11px; line-height: 1.35; white-space: nowrap; }
-  .pf .q { fill: none; stroke: var(--faint); stroke-width: 1; stroke-linejoin: round; stroke-opacity: .75; } .pf .q50 { stroke: var(--muted); stroke-width: 1.5; stroke-opacity: 1; } .pf .q10, .pf .q90 { stroke-dasharray: 2 3; }
+  .pf .bar { fill: var(--faint); fill-opacity: .55; } .pf .bar.me { fill: var(--accent); } .pf .bar.over { fill: none; stroke: var(--faint); } .pf .bar.over.me { stroke: var(--accent); }
+  .pf .spine { stroke: var(--thread); }
   .pf .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .pf .end { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
   .pf .cross { stroke: var(--faint); } .pf svg * { pointer-events: none; } /* the svg itself takes the pointer, so a redraw under it keeps the hover */
@@ -450,7 +451,6 @@ function renderNow(ps) {
 /* pf:begin */
 const PF = (() => {
   const DAY = 864e5, KEYS = ['attempts', 'solved', 'players', 'fresh'];
-  const QS = [10, 25, 50, 75, 90];
   const MIN_DAYS = 5; // fewer earlier days than this: no percentile
   const EARLIEST = Date.UTC(2010, 0, 1); // a row stamped before this has no usable time
   const MIN_TRIES = 5; // fewer attempts so far today: no percentile for the solved share
@@ -515,10 +515,10 @@ const PF = (() => {
     return (100 * below) / vals.length;
   }
   const whole = (pr) => (pr <= 0 ? 0 : pr >= 100 ? 100 : Math.max(1, Math.min(99, Math.round(pr)))); // 0 and 100 only when exact
-  // Top of a count's axis: all of today and of the percentile lines. A freak day is above the top line, so it does not flatten the rest.
-  function top(m, k, lines) {
-    const v = m.today[k].v;
-    return Math.max(2, v.length ? v[v.length - 1] : 0, ...lines.map((b) => (b.q ? b.q[b.q.length - 1] : 0)));
+  // Top of a count's axis: all of today, and nine past days in ten by their end. The rest are counted above it.
+  function top(m, k) {
+    const last = (l) => (l.v.length ? l.v[l.v.length - 1] : l.before || 0), ends = m.past.map((d) => last(d[k])).sort((a, b) => a - b);
+    return Math.max(2, last(m.today[k]), ends.length ? quantile(ends, 0.9) : 0);
   }
   function median(vals) {
     if (!vals.length) return null;
@@ -535,16 +535,22 @@ const PF = (() => {
     const at = p * (sorted.length - 1), lo = Math.floor(at), hi = Math.ceil(at);
     return sorted[lo] + (sorted[hi] - sorted[lo]) * (at - lo);
   }
-  // The earlier days' percentiles through the day: [{ c, q: one value per QS }], where enough days have a value.
-  function bands(past, k, step = DAY / 144) {
-    const out = [];
-    for (let c = 0; c <= DAY; c += step) {
-      const a = pastAt(past, k, c).sort((x, y) => x - y);
-      out.push({ c, q: a.length < MIN_DAYS ? null : QS.map((p) => quantile(a, p / 100)) });
-    }
-    return out;
+  // The width of a bin: the finest whole share of the axis's step that makes at most 15 bins (whole numbers for a count).
+  function binWidth(k, hi, step) {
+    if (k === 'solved') return 0.1;
+    const n = [10, 5, 4, 2].find((q) => Number.isInteger(step / q) && hi / (step / q) <= 15 + 1e-9);
+    return n ? step / n : step;
   }
-  return { DAY, KEYS, MIN_DAYS, MIN_TRIES, dayStart, clockOf, days, valueAt, rank, whole, top, median, at, QS, quantile, bands };
+  const bin = (k, v, hi, w) => (k === 'solved' && v >= 1 ? 9 : v >= hi ? Math.round(hi / w) : Math.floor(v / w + 1e-9)); // the one past the last holds hi and up
+  // The earlier days at clock c, counted by bin, with the bin today stands in; null when too few days have a value.
+  function hist(m, k, c, hi, w) {
+    const vals = pastAt(m.past, k, c);
+    if (vals.length < MIN_DAYS) return null;
+    const n = Array(Math.round(hi / w) + 1).fill(0), v = c <= m.clock ? valueAt(m.today[k], c) : null;
+    for (const x of vals) n[bin(k, x, hi, w)]++;
+    return { n, me: v == null ? -1 : bin(k, v, hi, w) };
+  }
+  return { DAY, KEYS, MIN_DAYS, MIN_TRIES, dayStart, clockOf, days, valueAt, rank, whole, top, median, at, quantile, binWidth, hist };
 })();
 /* pf:end */
 
@@ -592,32 +598,30 @@ function drawPf(f, m) {
   f.pr.replaceChildren(...(q.pr == null ? [] : [h('strong', { text: `PR ${PF.whole(q.pr)}` })]),
     ...(q.days ? [h('span', { class: 'muted', text: q.few === 'days' ? pl(q.days, 'past day') : q.few ? `under ${PF.MIN_TRIES} attempts` : `vs ${of}` })] : []));
   f.pr.title = q.few === 'days' ? `A percentile needs ${PF.MIN_DAYS} past days` : q.few ? `A percentile needs ${PF.MIN_TRIES} attempts today` : `Beats ${PF.whole(q.pr)}% of the ${of} since Nov 15 at this time of day (a tie counts half)`;
-  const share = k === 'solved', fmt = (v) => (share ? pct(v) : String(v)), bands = PF.bands(m.past, k);
-  const yt = share ? { hi: 1, ticks: [0, 0.5, 1] } : nice(0, PF.top(m, k, bands), 3);
+  const share = k === 'solved', fmt = (v) => (share ? pct(v) : String(v));
+  let yt = share ? { hi: 1, ticks: [0, 0.5, 1] } : nice(0, PF.top(m, k), 3);
+  if (!share && yt.ticks[1] % 1) yt = { hi: 8, ticks: [0, 4, 8] }; // a step of 2.5 (to 7.5) has no whole bins
   const ticks = yt.ticks.filter((v) => share || Number.isInteger(v));
-  const W = Math.max(120, f.box.clientWidth), H = W < 220 ? 92 : 112;
-  const mg = { t: 6, r: 18, b: 16, l: Math.max(26, Math.ceil(7 * Math.max(...ticks.map((v) => fmt(v).length))) + 8) };
+  const W = Math.max(120, f.box.clientWidth), H = W < 220 ? 104 : 128, every = (W < 220 ? 6 : 3) * HOUR;
+  const bw = PF.binWidth(k, yt.hi, yt.ticks[1] - yt.ticks[0]), cols = [];
+  for (let c = every; c <= PF.DAY; c += every) { const b = PF.hist(m, k, c, yt.hi, bw); if (b) cols.push({ c, ...b }); }
+  const over = cols.some((b) => b.n[b.n.length - 1]), tick = (v) => fmt(v) + (over && v === yt.hi ? '+' : '');
+  const mg = { t: over ? 12 : 6, r: 5, b: 16, l: Math.max(26, Math.ceil(7 * Math.max(...ticks.map((v) => tick(v).length))) + 8) };
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H);
-  const x = lin(0, PF.DAY, mg.l, W - mg.r), y = lin(0, yt.hi, H - mg.b, mg.t);
+  const x = lin(0, PF.DAY + every, mg.l, W - mg.r), y = lin(0, yt.hi, H - mg.b, mg.t);
   svg.replaceChildren();
-  yGrid(svg, y, ticks, mg.l, W - mg.r, fmt);
+  yGrid(svg, y, ticks, mg.l, W - mg.r, tick);
   for (const hr of W < 220 ? [6, 18] : [6, 12, 18]) svg.append(s('text', { x: x(hr * HOUR), y: H - 4, 'text-anchor': 'middle', text: new Date(2001, 0, 1, hr).toLocaleTimeString([], { hour: 'numeric' }) }));
-  const g = s('g');
-  PF.QS.forEach((p, i) => {
-    let d = '', on = false;
-    for (const b of bands) { if (b.q) d += `${on ? 'L' : 'M'}${x(b.c).toFixed(1)},${y(b.q[i]).toFixed(1)}`; on = !!b.q; }
-    if (!d) return;
-    g.append(s('path', { class: `q q${p}`, d }));
-  });
-  const end = bands[bands.length - 1].q;
-  if (end) {
-    const put = [];
-    for (const p of [50, 90, 10, 75, 25]) { // the ones that matter most first
-      const py = y(end[PF.QS.indexOf(p)]);
-      if (put.some((o) => Math.abs(o - py) < 9)) continue;
-      put.push(py);
-      g.append(s('text', { class: 'ql', x: W - mg.r + 3, y: py, dy: '0.32em', text: String(p) }));
-    }
+  // A spine stands at its time; its bars run right from it, the longest the commonest height at that time.
+  const g = s('g'), room = x(every) - x(0) - 3;
+  for (const { c, n, me } of cols) {
+    const most = Math.max(...n);
+    n.forEach((v, i) => {
+      if (!v) return;
+      const last = i === n.length - 1, y1 = last ? mg.t - 8 : y((i + 1) * bw), y0 = last ? mg.t - 1 : y(i * bw), gap = y0 - y1 > 4 ? 0.75 : 0.25;
+      g.append(s('rect', { class: `bar${last ? ' over' : ''}${i === me ? ' me' : ''}`, x: x(c), y: (y1 + gap).toFixed(2), width: Math.max(2, (room * v) / most).toFixed(1), height: (y0 - y1 - 2 * gap).toFixed(2), rx: 1 }));
+    });
+    g.append(s('line', { class: 'spine', x1: x(c), x2: x(c), y1: mg.t, y2: H - mg.b }));
   }
   svg.append(g);
   if (q.value != null) {
@@ -641,7 +645,8 @@ function point(f) { // the reading under the pointer (f.pos is a clock time), or
   const today = later ? null : `today ${pfFmt(f.k, q.value)}`, pr = later || q.pr == null ? null : `PR ${PF.whole(q.pr)}`;
   const med = q.median == null ? null : `past median ${pfFmt(f.k, q.median)}`, join = (...a) => a.filter(Boolean).join(' · ');
   const says = join(show ? pfClock(c) : 'now', today, pr, pr && `vs ${pl(q.days, 'day')}`, med);
-  if (says !== f.says) { f.says = says; f.svg.setAttribute('aria-valuenow', R(c / MIN)); f.svg.setAttribute('aria-valuetext', says); }
+  f.svg.setAttribute('aria-valuenow', R(c / MIN));
+  if (says !== f.says) { f.says = says; f.svg.setAttribute('aria-valuetext', says); }
   if (!show) { f.said = ''; f.tip.replaceChildren(); return; }
   f.cross.setAttribute('x1', x(c)); f.cross.setAttribute('x2', x(c)); f.cross.setAttribute('opacity', 1);
   if (!later && q.value != null) { f.ring.setAttribute('cx', x(c)); f.ring.setAttribute('cy', y(q.value)); f.ring.setAttribute('opacity', 1); }

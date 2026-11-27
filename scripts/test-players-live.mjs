@@ -382,7 +382,7 @@ try {
     let m = PF.days([], day(10, 12));
     assert.equal(m.past.length, 0);
     assert.deepEqual(PF.at(m, 'attempts', m.clock), { value: 0, days: 0, median: null, few: 'days', pr: null });
-    assert.equal(PF.at(m, 'solved', m.clock).value, null); assert.ok(PF.bands(m.past, 'attempts').every((b) => b.q === null));
+    assert.equal(PF.at(m, 'solved', m.clock).value, null); assert.equal(PF.hist(m, 'attempts', 9 * H, 10, 1), null);
     // only today; then the first, partial day is never compared with
     assert.equal(PF.days([row(day(10, 9))], day(10, 12)).past.length, 0);
     assert.equal(PF.days([row(day(9, 9)), row(day(10, 9))], day(10, 12)).past.length, 0);
@@ -425,18 +425,27 @@ try {
       const mm = PF.days([row(day(1, 9)), row(day(2 + n, 8))], day(2 + n, 12));
       assert.equal(mm.past.length, n); assert.equal(PF.at(mm, 'attempts', mm.clock).pr != null, some);
     }
-    // percentile lines: the whole day, in order, the middle one the median the hover gives, none on under 5 days
     assert.equal(PF.quantile([1, 2, 3, 4], 0.5), 2.5); assert.equal(PF.quantile([1, 2, 3, 4, 5], 0.25), 2); assert.equal(PF.quantile([7], 0.9), 7);
-    for (const k of PF.KEYS) {
-      const b = PF.bands(m.past, k);
-      assert.equal(b.length, 145); assert.equal(b[0].c, 0); assert.equal(b[144].c, PF.DAY);
-      for (const { c, q } of b) {
-        const a = PF.at(m, k, c);
-        assert.equal(q == null, a.days < PF.MIN_DAYS);
-        if (q) { assert.ok(q.every((v, i) => !i || v >= q[i - 1])); assert.ok(Math.abs(q[2] - a.median) < 1e-9); }
+    // histograms: every past day with a value is in exactly one bin, today's bin is marked up to now and not after
+    for (const k of PF.KEYS) for (let c = 0; c <= PF.DAY; c += H) {
+      const hi = k === 'solved' ? 1 : 5, w = k === 'solved' ? 0.1 : 1, b = PF.hist(m, k, c, hi, w), a = PF.at(m, k, c);
+      assert.equal(b === null, a.days < PF.MIN_DAYS);
+      if (!b) continue;
+      assert.equal(b.n.length, k === 'solved' ? 11 : 6); assert.equal(b.n.reduce((x, y) => x + y), a.days);
+      assert.equal(b.me === -1, c > m.clock || a.value == null);
+    }
+    { // past by noon: 2 3 4 0 6 7 8, today 5
+      let b = PF.hist(m, 'attempts', 12 * H, 10, 1); assert.deepEqual(b.n, [1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0]); assert.equal(b.me, 5);
+      b = PF.hist(m, 'attempts', 12 * H, 6, 2); assert.deepEqual(b.n, [1, 2, 1, 3], '6 and up is past the last bin'); assert.equal(b.me, 2);
+      for (const [v, i] of [[0, 0], [0.1, 1], [0.3, 3], [0.6, 6], [0.7, 7], [0.999, 9], [1, 9]]) {
+        const d = { solved: { c: [0], v: [v], before: null } }, mm = { today: d, past: Array(5).fill(d), clock: H };
+        b = PF.hist(mm, 'solved', H, 1, 0.1); assert.equal(b.n[i], 5, `solved ${v}`); assert.equal(b.me, i); assert.equal(b.n[10], 0);
+      }
+      for (const [hi, step, w] of [[600, 200, 40], [30, 10, 2], [15, 5, 1], [2, 1, 1], [10, 5, 1], [40, 20, 4], [3, 1, 1], [1500, 500, 100]]) {
+        assert.equal(PF.binWidth('attempts', hi, step), w, `${hi}`); assert.ok(hi / w <= 15 && Number.isInteger(hi / w));
       }
     }
-    assert.ok(PF.bands(m.past.slice(0, 4), 'attempts').every((b) => b.q === null));
+    assert.equal(PF.hist({ ...m, past: m.past.slice(0, 4) }, 'attempts', 12 * H, 10, 1), null);
     // why there is no percentile
     assert.equal(PF.at(m, 'solved', 9.5 * H).few, 'tries'); assert.equal(PF.at(m, 'solved', m.clock).few, ''); assert.equal(PF.at(PF.days(rows, day(5, 12)), 'solved', 12 * H).few, 'days');
     // a row with no usable time makes no days, and its player is still not new
@@ -448,9 +457,10 @@ try {
     // 0 and 100 are shown only when exact
     assert.deepEqual([0, 0.17, 0.5, 49.5, 99.4, 99.83, 100].map(PF.whole), [0, 1, 1, 50, 99, 99, 100]);
     assert.equal(PF.whole(PF.rank([...Array(299).fill(1), 9], 9)), 99);
-    // the axis: all of today and of the lines fits, one freak day among many does not set it, quiet data keeps a floor
-    const top = (q90, today) => PF.top({ today: { attempts: { v: today ? [1, today] : [] } } }, 'attempts', [{ q: null }, { q: [0, 0, 0, 0, q90] }]);
-    assert.equal(top(40, 22), 40); assert.equal(top(40, 300), 300); assert.equal(top(0, 0), 2); assert.equal(PF.top(m, 'attempts', [{ q: null }]), Math.max(2, ...m.today.attempts.v));
+    // the axis: today always fits, one freak day among many does not set it, quiet data keeps a floor
+    const line = (v) => ({ attempts: { v: v ? [1, v] : [], before: 0 } });
+    const top = (past, today) => PF.top({ past: past.map(line), today: line(today) }, 'attempts');
+    assert.equal(top([...Array(10).fill(40), 900], 22), 40); assert.equal(top(Array(5).fill(40), 300), 300); assert.equal(top([], 0), 2); assert.equal(top([0, 0, 0, 0, 0], 0), 2);
     assert.equal(PF.quantile([...Array(10).fill(40), 900], 0.9), 40, 'a freak day among eleven');
     // DST: spring forward 2026-03-08 (23 h), back 2026-11-01 (25 h)
     const spring = PF.days([row(day(6, 9, 0, 2)), row(day(8, 1, 30, 2)), row(day(8, 3, 30, 2)), row(day(8, 9, 0, 2)), row(day(8, 23, 59, 2))], day(9, 9, 0, 2));
@@ -485,7 +495,7 @@ try {
     // 20k rows over 400 days, quickly
     process.env.TZ = 'America/Los_Angeles';
     const many = []; for (let i = 0; i < 20000; i++) many.push(row(day(1) - 400 * 864e5 + i * 400 * 864 * 5 - 0, `p${i % 300}`, i % 2));
-    const began = performance.now(), big = PF.days(many, day(2, 12)); for (const k of PF.KEYS) { PF.at(big, k, big.clock); PF.bands(big.past, k); }
+    const began = performance.now(), big = PF.days(many, day(2, 12)); for (const k of PF.KEYS) { PF.at(big, k, big.clock); PF.top(big, k); for (let c = 3 * H; c <= PF.DAY; c += 3 * H) PF.hist(big, k, c, 100, 10); }
     assert.ok(performance.now() - began < 1000, 'quick on 20k rows'); assert.ok(big.past.length >= 399);
     assert.equal(deep(PF.days(rows, day(9, 12))), deep(m), 'pure');
   } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }
