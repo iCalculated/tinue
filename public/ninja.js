@@ -387,6 +387,12 @@ export class NinjaBoard {
     clearTimeout(this._settleTimer);
     this._settleTimer = setTimeout(() => {
       if (this._resolve || this.dead || this.shown || !this._owns() || !this.available) return;
+      // (steady: a frame that came up out of sight has no size until it is lent, and PTN Ninja's board grows into the box)
+      if (this.steady) {
+        const on = performance.now() - this.borrowedAt, sized = this.resizedAt > this.borrowedAt;
+        if (on < this.steady || (!sized && on < 2 * this.steady)) return this._settle(50);
+        if (sized && performance.now() - this.resizedAt < this.steady / 2) return this._settle(50);
+      }
       const still = performance.now() - (this.resizedAt ?? -Infinity);
       if (still < QUIET_MS) return this._settle(QUIET_MS - still);
       this.shown = true;
@@ -554,7 +560,8 @@ export class NinjaBoard {
   // ---------- lending the frame to Rush ----------
   // A board on el (Rush's #rush-board, a box the frame is laid over) that plays on this frame while it has borrowed it.
   // Until borrow() and after giveBack() it only keeps track of its calls. onDead(): PTN Ninja stopped answering mid-run.
-  lend(el, { onMove, onDead } = {}) { return new NinjaBoard(el, { onMove, onDead, lender: this }); }
+  // steady (ms): kept unseen at least this long after borrow(), until PTN Ninja's board has its size (the Settings example).
+  lend(el, { onMove, onDead, steady = 0 } = {}) { const b = new NinjaBoard(el, { onMove, onDead, lender: this }); b.steady = steady; return b; }
 
   _borrower(lender, onDead) {
     this.lender = lender; this.onDead = onDead;
@@ -588,7 +595,7 @@ export class NinjaBoard {
   borrow(size = 6) {
     if (this.dead || this.borrowed || this.lender.state !== 'up') return false;
     const f = this.iframe, L = this.lender;
-    f.ninjaOwner = this; this.borrowed = true;
+    f.ninjaOwner = this; this.borrowed = true; this.borrowedAt = performance.now();
     this.look = L.look; this.shown = false; this.dimmed = false; this.placed = null;
     this._size(size);
     L.el.closest('main')?.classList.add('lend');

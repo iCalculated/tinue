@@ -22,7 +22,7 @@ export class ExampleBoard {
     el.innerHTML = `<div class="set-ex-tabs" role="group" aria-label="Example board">${Object.entries(EXAMPLES).map(([k, x]) => `<button type="button" data-ex="${k}" aria-pressed="${k === this.at}">${x.name}</button>`).join('')}</div>
       <div class="set-ex-board"><div class="board-host"></div><p class="set-ex-msg" role="status"></p></div>`;
     this.msg = el.querySelector('.set-ex-msg');
-    this.board = frame.lend(el.querySelector('.board-host'), { onMove() {}, onDead: () => this.down() });
+    this.board = frame.lend(el.querySelector('.board-host'), { onMove() {}, onDead: () => this.down(), steady: 700 });
     this.board.ui({ disableBoard: true });
     for (const b of el.querySelectorAll('[data-ex]')) b.onclick = () => {
       if (this.at === b.dataset.ex) return;
