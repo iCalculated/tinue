@@ -172,12 +172,17 @@ const noted = () => { const x = onRush() && history.state?.rushEnd; return x && 
 function backToEnd() {
   const x = noted();
   if (!x) return false;
-  const mine = ended?.rec.t === x.t ? ended : null;
+  const mine = !x.past && ended?.rec.t === x.t ? ended : null; // (past: it was opened from the recent runs)
   const list = pastRuns(), i = list.findIndex((r) => r.t === x.t), rec = mine?.rec ?? list[i];
   if (!rec) { note(null); return false; } // (its history was cleared since)
   st = mine?.s ?? null;
   showEnd(rec, st, mine ? null : i, x);
-  if (mine) showBest(...(mine.post || [null, null, mine.s]));
+  if (mine) {
+    const p = mine.post, same = R.who(token) === mine.s.who; // (signed in or out since: another player's bests)
+    const sent = p?.[3] === 'keep' && !queued().some((q) => q.body.run === mine.s.token);
+    showBest(...(p && same ? (sent ? [p[0], p[1], p[2], null] : p) : [null, null, mine.s]));
+    if (x.y > 0) window.scrollTo?.(0, x.y); // (the message above the cards is back: the bottom is reachable)
+  }
   return true;
 }
 
@@ -310,7 +315,7 @@ function renderRecent(asking = false) {
       : '<button type="button" class="link" id="rush-clear">Clear history</button>'}</p>`;
   for (const b of el.querySelectorAll('.rush-recent-row')) b.onclick = () => { const r = list[+b.dataset.i]; if (r) showEnd(r, null, +b.dataset.i); };
   if (asking) {
-    $('#rush-clear-yes').onclick = () => { store.del(HIST_KEY); renderRecent(); };
+    $('#rush-clear-yes').onclick = () => { store.del(HIST_KEY); ended = null; renderRecent(); };
     $('#rush-clear-no').onclick = () => { renderRecent(); $('#rush-clear')?.focus(); };
     $('#rush-clear-no').focus();
   } else $('#rush-clear').onclick = () => renderRecent(true);
@@ -916,7 +921,7 @@ async function endRun(wrong = null, played = false) {
 // one from the recent runs (when it was played, Back only; at, its row there, which Back gives the focus to).
 function showEnd(rec, s, at = null, was = null) {
   if (s && ended?.s !== s) ended = { rec, s, post: null };
-  note({ ...(was || {}), t: rec.t });
+  note({ ...(was || {}), t: rec.t, ...(s ? {} : { past: true }) });
   const sum = rec.sum, mode = rec.mode, played = R.timePlayed(rec); // (the engine's pauses aren't the player's)
   section('rush-end');
   paintTheme(); // (before the pictures go in: drawn in the player's theme from the start, when it is known)
@@ -1000,7 +1005,7 @@ function lookBack(rec) {
   const list = $('#rush-cards'), dlg = $('#rush-look'), n = rec.puzzles.length;
   let at = -1, leaving = false; // leaving: the dialog closes because its link was followed
   // the puzzle left for, its dialog open or not: what Back puts back
-  const leftAt = (i, dialog) => note({ t: rec.t, y: Math.round(window.scrollY || 0), look: i, dlg: dialog });
+  const leftAt = (i, dialog) => note({ ...noted(), t: rec.t, y: Math.round(window.scrollY || 0), look: i, dlg: dialog });
   const btn = (i) => list.querySelector(`.rush-card[data-i="${i}"] .rush-res`);
   const show = (i) => {
     if (at >= 0) btn(at)?.setAttribute('aria-expanded', 'false');
@@ -1043,11 +1048,13 @@ function lookBack(rec) {
 }
 // The end screen's line for a run the board ended (boardDied)
 export const BOARD_ENDED = 'The board (PTN Ninja) stopped answering, so this run ended. It isn’t kept, and doesn’t count against you.';
+let bestSeq = 0;
 async function showBest(r, mode, s, out = null) {
-  if (ended?.s === s) ended.post = [r, mode, s, out]; // (the answer may come while another page is up)
+  if (ended?.s === s && (mode !== null || out)) ended.post = [r, mode, s, out]; // (the answer may come while another page is up)
   if (st !== s) return;
+  const n = ++bestSeq;
   const best = r?.best ?? await bestFor();
-  if (st !== s) return;
+  if (st !== s || n !== bestSeq) return; // (n: a later answer has been shown)
   $('#rush-end-best').innerHTML = `<h2>Your best</h2>${bestTable(best?.[s.run.mode])}`;
   const nb = r?.newBest, el = $('#rush-newbest');
   // a best is gold; where the run went is plain news (kept for later) or a failure (red), never gold
