@@ -381,7 +381,7 @@ try {
     // empty data
     let m = PF.days([], day(10, 12));
     assert.equal(m.past.length, 0);
-    assert.deepEqual(PF.at(m, 'attempts', m.clock), { value: 0, days: 0, median: null, pr: null });
+    assert.deepEqual(PF.at(m, 'attempts', m.clock), { value: 0, days: 0, median: null, few: 'days', pr: null });
     assert.equal(PF.at(m, 'solved', m.clock).value, null); assert.deepEqual(PF.cloud(m.past, 'attempts'), []);
     // only today; then the first, partial day is never compared with
     assert.equal(PF.days([row(day(10, 9))], day(10, 12)).past.length, 0);
@@ -424,6 +424,22 @@ try {
       assert.ok(c.every((d) => d.c >= 0 && d.c < PF.DAY && d.v === PF.valueAt(m.past[0].attempts, d.c)));
       assert.ok(new Set(c.map((d) => Math.round(d.c / 6e5))).size > 60, 'spread over the clock');
     }
+    // why there is no percentile
+    assert.equal(PF.at(m, 'solved', 9.5 * H).few, 'tries'); assert.equal(PF.at(m, 'solved', m.clock).few, ''); assert.equal(PF.at(PF.days(rows, day(5, 12)), 'solved', 12 * H).few, 'days');
+    // a row with no usable time makes no days, and its player is still not new
+    for (const t of [0, null, undefined, NaN, -5, 1.78e9]) {
+      const mm = PF.days([{ t, player: 'new', win: 1 }, ...rows], day(9, 12));
+      assert.equal(mm.past.length, 7, `t ${t}`); assert.equal(PF.at(mm, 'attempts', mm.clock).pr, 400 / 7); assert.equal(PF.at(mm, 'fresh', mm.clock).value, 0);
+    }
+    assert.equal(PF.days([{ t: 0, player: 'x', win: 1 }], day(9, 12)).past.length, 0);
+    // 0 and 100 are shown only when exact
+    assert.deepEqual([0, 0.17, 0.5, 49.5, 99.4, 99.83, 100].map(PF.whole), [0, 1, 1, 50, 99, 99, 100]);
+    assert.equal(PF.whole(PF.rank([...Array(299).fill(1), 9], 9)), 99);
+    // the axis: one freak day does not set it, today always fits, quiet data keeps a floor
+    const line = (v) => ({ attempts: { v: v ? [1, v] : [] } });
+    const top = (past, today) => PF.top({ past: past.map(line), today: line(today) }, 'attempts');
+    assert.equal(top([40, 42, 38, 50, 900], 22), 75); assert.equal(top([40, 42, 38, 50, 60], 22), 60); assert.equal(top([40, 42, 38, 50, 900], 300), 300);
+    assert.equal(top([0, 0, 0, 0, 0, 7], 1), 7, 'empty days do not pull it down'); assert.equal(top([], 0), 2); assert.equal(top([2, 2, 2, 2, 4], 0), 4, 'twice is not a freak');
     // DST: spring forward 2026-03-08 (23 h), back 2026-11-01 (25 h)
     const spring = PF.days([row(day(6, 9, 0, 2)), row(day(8, 1, 30, 2)), row(day(8, 3, 30, 2)), row(day(8, 9, 0, 2)), row(day(8, 23, 59, 2))], day(9, 9, 0, 2));
     assert.deepEqual(spring.past.map((d) => (d.t1 - d.t0) / H), [24, 23]);
@@ -436,7 +452,20 @@ try {
     for (const [mo, d] of [[2, 8], [10, 1]]) { // today on a clock-change day: never runs backwards, all of the day so far counted
       let last = -1;
       const t0 = day(d, 0, 0, mo), xs = [];
-      for (let k = 0; k < 90; k++) { xs.push(row(t0 + k * 15 * 6e4)); if (xs.at(-1).t >= PF.dayStart(t0, 1)) break; const mm = PF.days(xs, xs.at(-1).t); assert.ok(mm.clock >= last); last = mm.clock; assert.equal(PF.at(mm, 'attempts', mm.clock).value, xs.length); }
+      for (let k = 0; k < 90; k++) { xs.push(row(t0 + k * 15 * 6e4)); if (xs.at(-1).t >= PF.dayStart(t0, 1)) break; const mm = PF.days(xs, xs.at(-1).t); const w = new Date(xs.at(-1).t), c = w.getHours() * H + w.getMinutes() * 6e4;
+        assert.equal(mm.clock, c, 'today stands at the clock time'); assert.ok(c >= last || (mo === 10 && c === H), 'back only when the clock is'); last = c;
+        assert.equal(PF.at(mm, 'attempts', mm.clock).value, xs.length);
+        for (const k of PF.KEYS) assert.ok(mm.today[k].c.every((v, i, a) => v <= c && (!i || v >= a[i - 1])), 'the line never doubles back'); }
+    }
+    { // the second 01:06 of the autumn day meets every past 01:06, as "yesterday by now" does
+      const back = [row(n1 - 7 * 864e5)];
+      for (let i = 6; i >= 1; i--) back.push(row(day(32 - i, 1, 45, 9)));
+      back.push(row(n1 + 5 * 6e4), row(n1 + 1.9 * H));
+      for (const [plus, value] of [[1.1, 1], [2.1, 2]]) {
+        const mm = PF.days(back, n1 + plus * H), z = PF.at(mm, 'attempts', mm.clock);
+        assert.equal(mm.clock, 1 * H + 6 * 6e4); assert.equal(z.median, 0); assert.equal(z.value, value); assert.equal(z.pr, 100);
+      }
+      const mm = PF.days(back, n1 + 3.1 * H); assert.equal(mm.clock, 2 * H + 6 * 6e4); assert.equal(PF.at(mm, 'attempts', mm.clock).median, 1);
     }
     process.env.TZ = 'America/Sao_Paulo'; // put forward at midnight: the day starts at 01:00
     const sp = PF.days([row(new Date(2018, 10, 2, 9)), row(new Date(2018, 10, 4, 1, 30)), row(new Date(2018, 10, 4, 9))], +new Date(2018, 10, 5, 9));

@@ -60,6 +60,7 @@
   .pf { position: relative; grid-column: 1 / -1; align-self: end; margin-top: 4px; }
   .pf svg { display: block; width: 100%; touch-action: pan-y; }
   .pf svg text { font-size: 10px; }
+  .pf .tip { padding: 2px 6px; font-size: 11px; line-height: 1.35; white-space: nowrap; }
   .pf .past { fill: var(--muted); fill-opacity: .22; } /* each dot, so a crowd is darker */
   .pf .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .pf .end { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
@@ -74,7 +75,7 @@
   .res { letter-spacing: 1px; font-size: 12px; }
   .ok { color: var(--ok); } .bad { color: var(--bad); } .rf, .d.rf { color: var(--refund); } .d.gone { text-decoration: line-through; }
   i.rf { font-style: normal; font-size: 11.5px; margin-left: 4px; } p.rf-note { color: var(--fg); margin-bottom: 0; }
-  @media (max-width: 720px) { #today { grid-template-columns: minmax(0, 1fr); } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; } .stat b { font-size: 22px; } .stat .pr strong { font-size: 18px; } }
+  @media (max-width: 720px) { #today { grid-template-columns: minmax(0, 1fr); } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 18px; } .stat b { font-size: 22px; } .stat .pr strong { font-size: 18px; } }
 
   /* controls */
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
@@ -450,6 +451,7 @@ function renderNow(ps) {
 const PF = (() => {
   const DAY = 864e5, KEYS = ['attempts', 'solved', 'players', 'fresh'];
   const MIN_DAYS = 5; // fewer earlier days than this: no percentile
+  const EARLIEST = Date.UTC(2010, 0, 1); // a row stamped before this has no usable time
   const MIN_TRIES = 5; // fewer attempts so far today: no percentile for the solved share
   const dayStart = (t, plus = 0) => { const d = new Date(t); return +new Date(d.getFullYear(), d.getMonth(), d.getDate() + plus); };
   const wall = (t) => { const d = new Date(t); return ((d.getHours() * 60 + d.getMinutes()) * 60 + d.getSeconds()) * 1000 + d.getMilliseconds(); };
@@ -480,19 +482,23 @@ const PF = (() => {
     if (fresh) step('fresh', day.fresh.c.length + 1);
   }
   // rows (oldest first) -> today, and every whole local day before it. The day of the first row is left out: the data
-  // starts part-way through it. A day nobody played is a day too.
+  // starts part-way through it. A day nobody played is a day too. A row with no usable time is on no day.
   function days(rows, now) {
     const t0 = dayStart(now), today = newDay(t0), past = [], at = new Map(), seen = new Set();
-    if (rows.length) for (let d = dayStart(rows[0].t, 1); d < t0; d = dayStart(d, 1)) { const day = newDay(d); past.push(day); at.set(d, day); }
+    const first = rows.find((r) => r.t >= EARLIEST);
+    if (first) for (let d = dayStart(first.t, 1); d < t0; d = dayStart(d, 1)) { const day = newDay(d); past.push(day); at.set(d, day); }
     let cur = null; // the day of the last row, so a run of rows on one day costs one Date
     for (const r of rows) {
       const fresh = !seen.has(r.player);
       seen.add(r.player);
-      if (r.t > now) continue;
+      if (!(r.t >= EARLIEST && r.t <= now)) continue;
       if (!cur || r.t < cur.t0 || r.t >= cur.t1) { const d = dayStart(r.t); cur = d === t0 ? today : at.get(d) || { t0: d, t1: dayStart(d, 1), skip: true }; }
       if (!cur.skip) add(cur, r, fresh, r.win ? 1 : 0);
     }
-    return { today, past, clock: clockOf(now, t0, today.t1) };
+    // In the second pass of a repeated hour today stands at the clock time it is, with all it has so far.
+    const clock = wall(now);
+    if (clockOf(now, t0, today.t1) > clock) for (const k of KEYS) today[k].c = today[k].c.map((c) => Math.min(c, clock));
+    return { today, past, clock };
   }
   function valueAt(line, c) { // the last step at or before c
     let lo = 0, hi = line.c.length;
@@ -506,6 +512,15 @@ const PF = (() => {
     for (const x of vals) below += x < v ? 1 : x === v ? 0.5 : 0;
     return (100 * below) / vals.length;
   }
+  const whole = (pr) => (pr <= 0 ? 0 : pr >= 100 ? 100 : Math.max(1, Math.min(99, Math.round(pr)))); // 0 and 100 only when exact
+  // Top of a count's axis: room for all of today and of the past, unless the past's busiest day is over twice its 9th in 10:
+  // then half as much again as that one, so a freak day does not flatten the rest.
+  function top(m, k) {
+    const last = (l) => (l.v.length ? l.v[l.v.length - 1] : 0);
+    const ends = m.past.map((d) => last(d[k])).filter((v) => v > 0).sort((a, b) => a - b), n = ends.length;
+    const busy = ends[Math.floor(0.9 * (n - 1))], max = ends[n - 1];
+    return Math.max(2, last(m.today[k]), n ? (max > 2 * busy ? 1.5 * busy : max) : 0);
+  }
   function median(vals) {
     if (!vals.length) return null;
     const a = vals.slice().sort((x, y) => x - y), m = a.length >> 1;
@@ -514,8 +529,8 @@ const PF = (() => {
   // stat k at clock c: today's value, its percentile (null when there is too little to say), how many days, their median
   function at(m, k, c) {
     const vals = pastAt(m.past, k, c), value = valueAt(m.today[k], c);
-    const enough = vals.length >= MIN_DAYS && (k !== 'solved' || valueAt(m.today.attempts, c) >= MIN_TRIES);
-    return { value, days: vals.length, median: median(vals), pr: enough ? rank(vals, value) : null };
+    const few = vals.length < MIN_DAYS ? 'days' : k === 'solved' && valueAt(m.today.attempts, c) < MIN_TRIES ? 'tries' : '';
+    return { value, days: vals.length, median: median(vals), few, pr: few ? null : rank(vals, value) };
   }
   const hash = (a, b) => { // 0..1, the same every time for the same day and place
     let x = (Math.imul(Math.floor(a / 6e4) | 0, 0x9e3779b1) ^ Math.imul(b + 1, 0x85ebca6b)) >>> 0;
@@ -535,7 +550,7 @@ const PF = (() => {
     });
     return out;
   }
-  return { DAY, KEYS, MIN_DAYS, MIN_TRIES, dayStart, clockOf, days, valueAt, rank, median, at, hash, cloud };
+  return { DAY, KEYS, MIN_DAYS, MIN_TRIES, dayStart, clockOf, days, valueAt, rank, whole, top, median, at, hash, cloud };
 })();
 /* pf:end */
 
@@ -543,8 +558,8 @@ const PF = (() => {
 const NAMES = { attempts: 'attempts', solved: 'solved', players: 'players', fresh: 'new players' };
 const figs = new Map(PF.KEYS.map((k) => {
   const f = { k, big: h('b'), pr: h('div', { class: 'pr' }), lbl: h('span', { class: 'lbl' }), pos: null };
-  f.tip = h('div', { class: 'tip', role: 'status' });
-  f.svg = s('svg', { role: 'img', tabindex: 0 });
+  f.tip = h('div', { class: 'tip', 'aria-hidden': 'true' }); // the svg says the same as its value
+  f.svg = s('svg', { role: 'slider', tabindex: 0, 'aria-label': `${NAMES[k]} by time of day`, 'aria-valuemin': 0, 'aria-valuemax': 1440 });
   f.box = h('div', { class: 'pf' }, [f.svg, f.tip]);
   const hide = () => { f.pos = null; point(f); };
   const at = (ev) => {
@@ -558,11 +573,11 @@ const figs = new Map(PF.KEYS.map((k) => {
   f.svg.addEventListener('mousedown', (ev) => ev.preventDefault()); // a click or tap reads a time; only Tab takes the focus
   f.svg.addEventListener('blur', hide);
   f.svg.addEventListener('keydown', (ev) => { // arrows step a quarter of an hour
-    const d = { ArrowLeft: -1, ArrowRight: 1 }[ev.key];
+    const d = { ArrowLeft: -1, ArrowRight: 1, Home: -1e3, End: 1e3 }[ev.key];
     if (ev.key === 'Escape') return hide();
     if (!d || !f.view) return;
     ev.preventDefault();
-    f.pos = f.pos == null ? f.view.m.clock : Math.max(0, Math.min(PF.DAY, f.pos + d * 15 * MIN));
+    f.pos = f.pos == null && Math.abs(d) === 1 ? f.view.m.clock : Math.max(0, Math.min(PF.DAY, (f.pos ?? 0) + d * 15 * MIN));
     point(f);
   });
   $('#stats').append(h('div', { class: 'stat' }, [f.big, f.pr, f.lbl, f.box]));
@@ -579,24 +594,24 @@ function renderPf(now) {
 function drawPf(f, m) {
   const { k, svg } = f, q = PF.at(m, k, m.clock), today = m.today[k];
   const of = pl(q.days, 'day');
-  f.pr.replaceChildren(...(q.pr == null ? [] : [h('strong', { text: `PR ${R(q.pr)}` })]),
-    ...(q.days ? [h('span', { class: 'muted', text: q.pr == null ? pl(q.days, 'past day') : `vs ${of}` })] : []));
-  f.pr.title = q.pr == null ? '' : `Beats ${R(q.pr)}% of ${of} at this time of day (a tie counts half)`;
-  svg.setAttribute('aria-label', `${NAMES[k]} today so far ${pfFmt(k, q.value)}${q.median == null ? '' : `, past median by now ${pfFmt(k, q.median)}`}${q.pr == null ? '' : `, percentile ${R(q.pr)} of ${of}`}. Left and right arrows read other times.`);
-  const W = Math.max(120, f.box.clientWidth), H = W < 220 ? 92 : 112, mg = { t: 6, r: 5, b: 16, l: k === 'solved' ? 32 : 26 };
+  f.pr.replaceChildren(...(q.pr == null ? [] : [h('strong', { text: `PR ${PF.whole(q.pr)}` })]),
+    ...(q.days ? [h('span', { class: 'muted', text: q.few === 'days' ? pl(q.days, 'past day') : q.few ? `under ${PF.MIN_TRIES} attempts` : `vs ${of}` })] : []));
+  f.pr.title = q.few === 'days' ? `A percentile needs ${PF.MIN_DAYS} past days` : q.few ? `A percentile needs ${PF.MIN_TRIES} attempts today` : `Beats ${PF.whole(q.pr)}% of ${of} at this time of day (a tie counts half)`;
+  const share = k === 'solved', fmt = (v) => (share ? pct(v) : String(v)), dots = PF.cloud(m.past, k);
+  const yt = share ? { hi: 1, ticks: [0, 0.5, 1] } : nice(0, PF.top(m, k), 3);
+  const ticks = yt.ticks.filter((v) => share || Number.isInteger(v));
+  const W = Math.max(120, f.box.clientWidth), H = W < 220 ? 92 : 112;
+  const mg = { t: 6, r: 5, b: 16, l: Math.max(26, Math.ceil(7 * Math.max(...ticks.map((v) => fmt(v).length))) + 8) };
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H);
-  const dots = PF.cloud(m.past, k);
-  let top = 0;
-  for (const d of dots) top = Math.max(top, d.v);
-  for (const v of today.v) top = Math.max(top, v);
-  const yt = k === 'solved' ? { hi: 1, ticks: [0, 0.5, 1] } : nice(0, Math.max(top, 2), 3);
-  const ticks = yt.ticks.filter((v) => k === 'solved' || Number.isInteger(v));
   const x = lin(0, PF.DAY, mg.l, W - mg.r), y = lin(0, yt.hi, H - mg.b, mg.t);
   svg.replaceChildren();
-  yGrid(svg, y, ticks, mg.l, W - mg.r, (v) => (k === 'solved' ? pct(v) : String(v)));
+  yGrid(svg, y, ticks, mg.l, W - mg.r, fmt);
   for (const hr of W < 220 ? [6, 18] : [6, 12, 18]) svg.append(s('text', { x: x(hr * HOUR), y: H - 4, 'text-anchor': 'middle', text: new Date(2001, 0, 1, hr).toLocaleTimeString([], { hour: 'numeric' }) }));
-  const g = s('g', { class: 'past' });
-  for (const d of dots) g.append(s('circle', { cx: x(d.c).toFixed(1), cy: y(d.v).toFixed(1), r: W < 220 ? 1.75 : 2.25 }));
+  const g = s('g', { class: 'past' }), rad = W < 220 ? 1.75 : 2.25;
+  for (const d of dots) { // off the top of the axis: a small arrowhead at its edge
+    const cx = x(d.c).toFixed(1);
+    g.append(d.v > yt.hi ? s('path', { d: `M${cx},${mg.t - 5}l3,5h-6z` }) : s('circle', { cx, cy: y(d.v).toFixed(1), r: rad }));
+  }
   svg.append(g);
   if (q.value != null) {
     let d = today.before == null ? '' : `M${x(0)},${y(today.before).toFixed(1)}`;
@@ -613,16 +628,22 @@ function drawPf(f, m) {
 function point(f) { // the reading under the pointer (f.pos is a clock time), or none
   const show = f.pos != null && f.view;
   f.tip.style.opacity = show ? 1 : 0;
-  if (f.cross) for (const e of [f.cross, f.ring]) e.setAttribute('opacity', 0);
-  if (!show) { f.said = ''; return; }
-  const { m, x, y } = f.view, c = Math.max(0, Math.min(PF.DAY, f.pos)), later = c > m.clock, q = PF.at(m, f.k, c);
+  if (!f.view) return;
+  for (const e of [f.cross, f.ring]) e.setAttribute('opacity', 0);
+  const { m, x, y, W } = f.view, c = show ? Math.max(0, Math.min(PF.DAY, f.pos)) : m.clock, later = c > m.clock, q = PF.at(m, f.k, c);
+  const today = later ? null : `today ${pfFmt(f.k, q.value)}`, pr = later || q.pr == null ? null : `PR ${PF.whole(q.pr)}`;
+  const med = q.median == null ? null : `past median ${pfFmt(f.k, q.median)}`, join = (...a) => a.filter(Boolean).join(' · ');
+  const says = join(show ? pfClock(c) : 'now', today, pr, pr && `vs ${pl(q.days, 'day')}`, med);
+  if (says !== f.says) { f.says = says; f.svg.setAttribute('aria-valuenow', R(c / MIN)); f.svg.setAttribute('aria-valuetext', says); }
+  if (!show) { f.said = ''; f.tip.replaceChildren(); return; }
   f.cross.setAttribute('x1', x(c)); f.cross.setAttribute('x2', x(c)); f.cross.setAttribute('opacity', 1);
   if (!later && q.value != null) { f.ring.setAttribute('cx', x(c)); f.ring.setAttribute('cy', y(q.value)); f.ring.setAttribute('opacity', 1); }
-  const lines = [pfClock(c), later ? null : `today ${pfFmt(f.k, q.value)}${q.pr == null ? '' : ` · PR ${R(q.pr)}`}`, q.median == null ? null : `past median ${pfFmt(f.k, q.median)}`].filter(Boolean);
-  if (lines.join('|') !== f.said) { f.said = lines.join('|'); f.tip.replaceChildren(...lines.map((t, i) => h('div', { class: i === 1 && !later ? null : 'muted', text: t }))); }
-  const tw = f.tip.offsetWidth, bw = f.box.clientWidth, px = x(c);
-  f.tip.style.left = `${Math.max(0, Math.min(px + 12 + tw > bw ? px - 12 - tw : px + 12, bw - tw))}px`;
-  f.tip.style.top = `${-f.tip.offsetHeight + 4}px`;
+  const lines = [join(pfClock(c), pr), join(today, W < 220 ? med?.replace('past ', today ? '' : 'past ') : med)].filter(Boolean);
+  if (lines.join('|') !== f.said) { f.said = lines.join('|'); f.tip.replaceChildren(...lines.map((text) => h('div', { text }))); }
+  // under the plot, over its hour labels, so it hides no number and none of the lines
+  const tw = f.tip.offsetWidth, bw = f.box.clientWidth;
+  f.tip.style.left = `${Math.max(0, Math.min(x(c) - tw / 2, bw - tw))}px`;
+  f.tip.style.top = `${f.box.clientHeight - 15}px`;
 }
 
 // ---------- rating over time ----------
