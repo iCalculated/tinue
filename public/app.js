@@ -2581,11 +2581,11 @@ function settingsPage() {
       <div class="panel set-list">
         <p class="set-desc set-note hidden" id="st-note"></p>
         <div class="set-item set-theme"><label for="st-ninja-theme">Board theme</label><select id="st-ninja-theme">
-          <option value="">tinue felt</option><option value="legacy">tinue classic</option>${NINJA_THEMES.map((id) => `<option value="${id}">${themeName(id)}</option>`).join('')}<option value="custom" hidden>Custom</option></select><div class="set-ex" id="st-example"></div></div>
-        <div class="set-item"><label for="st-ninja">Board look</label>
+          <option value="">tinue felt</option><option value="legacy">tinue classic</option>${NINJA_THEMES.map((id) => `<option value="${id}">${themeName(id)}</option>`).join('')}<option value="custom" hidden>Custom</option></select><div class="set-ex" id="st-example"></div>
+          <div class="set-sub"><label for="st-ninja">Board look</label>
           <form id="st-ninja-form" class="set-look"><input id="st-ninja" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="st-ninja-d st-ninja-msg" placeholder="A theme’s code, or &amp;axisLabels=false&amp;theme=zen">
             <button type="submit" id="st-ninja-use">Use</button><button type="button" id="st-ninja-clear">Clear</button></form>
-          <p class="set-desc" id="st-ninja-d"></p><p class="set-desc set-msg" id="st-ninja-msg" aria-live="polite"></p></div>
+          <p class="set-desc" id="st-ninja-d"></p><p class="set-desc set-msg" id="st-ninja-msg" aria-live="polite"></p></div></div>
         ${sel('confirm', 'Confirm moves', 'A move waits until you press Confirm or Enter.')}
         ${sel('sound', 'Sound', '', window.TINUE_BETA ? '<p class="set-desc"><a href="#/sounds" id="sound-lab-link">Sound lab</a></p>' : '')}
       </div>`;

@@ -207,7 +207,7 @@ try {
   assert.equal(posts(), POSTS0, 'nothing posted for an account at this site\'s defaults');
   assert.equal(await ev(`document.title`), 'Settings — tinue');
   // every setting there, each labelled and described; no Board row; the board's theme and look always usable
-  const items = await ev(`[...document.querySelectorAll('#view-settings .set-item > label')].map((l) => l.textContent + ':' + (document.getElementById(l.htmlFor)?.id || ''))`);
+  const items = await ev(`[...document.querySelectorAll('#view-settings .set-item label')].map((l) => l.textContent + ':' + (document.getElementById(l.htmlFor)?.id || ''))`);
   assert.deepEqual(items, ['Board theme:st-ninja-theme', 'Board look:st-ninja', 'Confirm moves:st-confirm', 'Sound:st-sound']);
   await noBetaRows('the Settings page');
   assert.equal(await ev(`!!document.querySelector('#st-board')`), false, 'no Board row');
@@ -530,6 +530,19 @@ try {
     const hop = async (...hs) => { for (const h of hs) { await ev(`(location.hash = '${h}', true)`); await sleep(300); } };
     await cdp('Page.navigate', { url: BASE + '/?ex1#/settings' }); await until(`!!document.querySelector('#st-example .lent')`, 'the example');
     await sleep(3600); assert.deepEqual(await ex(), { lent: true, down: '', msg: '' });
+    // moves: both sides in turn, Reset puts it back, nothing is posted; leaving and coming back starts it afresh
+    const reset = () => ev(`document.querySelector('.set-ex-reset').style.visibility`);
+    assert.equal(await reset(), 'hidden');
+    const said = (ptn) => ev(`(window.dispatchEvent(new MessageEvent('message', { source: document.querySelector('#board iframe').contentWindow, origin: 'https://ptn.ninja', data: { action: 'INSERT_PLY', value: '${ptn}' } })), true)`);
+    const posts0 = posts();
+    await said('a6'); assert.equal(await reset(), 'hidden', 'not a legal move'); await said('f5'); assert.equal(await reset(), '');
+    await said('a5'); await sleep(200);
+    assert.equal(await ev(`document.querySelector('#st-example .lent') != null && location.hash`), '#/settings');
+    assert.equal(posts(), posts0, 'nothing posted');
+    await ev(`(document.querySelector('.set-ex-reset').click(), true)`); await sleep(300); assert.equal(await reset(), 'hidden');
+    await said('f5'); assert.equal(await reset(), '', 'playable again'); await hop('#/leaderboard', '#/settings');
+    await until(`!!document.querySelector('#st-example .lent')`, 'back'); assert.equal(await reset(), 'hidden');
+    assert.notEqual(await ev('document.activeElement.tagName'), 'IFRAME', 'the keyboard stays with the page');
     ninjaMode = 'slow:4000';
     await cdp('Page.navigate', { url: BASE + '/?ex2#/settings' }); await sleep(800); await hop('#/', '#/settings', '#/', '#/settings');
     await until(`!!document.querySelector('#st-example .lent')`, 'the example after hopping', 12000); await sleep(4000);
