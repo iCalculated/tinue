@@ -529,7 +529,6 @@ try {
     const ex = () => ev(`JSON.stringify({ lent: !!document.querySelector('#st-example .lent'), down: document.querySelector('#board iframe')?.dataset.down || '', msg: document.querySelector('.set-ex-msg')?.textContent || '' })`).then(JSON.parse);
     const hop = async (...hs) => { for (const h of hs) { await ev(`(location.hash = '${h}', true)`); await sleep(300); } };
     await cdp('Page.navigate', { url: BASE + '/?ex1#/settings' }); await until(`!!document.querySelector('#st-example .lent')`, 'the example');
-    for (const k of ['road', 'road', 'flats', 'play']) await ev(`(document.querySelector('[data-ex="${k}"]').click(), true)`);
     await sleep(3600); assert.deepEqual(await ex(), { lent: true, down: '', msg: '' });
     ninjaMode = 'slow:4000';
     await cdp('Page.navigate', { url: BASE + '/?ex2#/settings' }); await sleep(800); await hop('#/', '#/settings', '#/', '#/settings');
@@ -542,7 +541,7 @@ try {
     assert.match((await ex()).msg, /Loading/); await until(retry, 'Retry again', 15000);
     ninjaMode = 'ok'; await ev(`(document.querySelector('.set-ex-msg button').click(), true)`);
     await until(`!!document.querySelector('#st-example .lent')`, 'up at last'); assert.equal((await ex()).msg, '');
-    step('the example board: quick tabs, left and entered while the frame loads, Retry failing then working');
+    step('the example board: up, left and entered while the frame loads, Retry failing then working');
   }
   if (errors.length) console.log('page errors:', errors);
   assert.deepEqual(errors.filter((e) => !/ptn\.ninja|ResizeObserver/i.test(e)), [], 'no page errors');

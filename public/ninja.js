@@ -561,7 +561,8 @@ export class NinjaBoard {
   // A board on el (Rush's #rush-board, a box the frame is laid over) that plays on this frame while it has borrowed it.
   // Until borrow() and after giveBack() it only keeps track of its calls. onDead(): PTN Ninja stopped answering mid-run.
   // steady (ms): kept unseen at least this long after borrow(), until PTN Ninja's board has its size (the Settings example).
-  lend(el, { onMove, onDead, steady = 0 } = {}) { const b = new NinjaBoard(el, { onMove, onDead, lender: this }); b.steady = steady; return b; }
+  // zoom: drawn that many times larger and scaled down to the box (a small one: PTN Ninja's own margins don't shrink).
+  lend(el, { onMove, onDead, steady = 0, zoom = 1 } = {}) { const b = new NinjaBoard(el, { onMove, onDead, lender: this }); b.steady = steady; b.zoom = zoom; return b; }
 
   _borrower(lender, onDead) {
     this.lender = lender; this.onDead = onDead;
@@ -639,9 +640,9 @@ export class NinjaBoard {
     const key = [fx, fy, fw, fh, X, Y, W, H].map((v) => v.toFixed(1)).join();
     if (key === this.placed && !force) return;
     this.placed = key;
-    const op = !this.shown ? '0' : this.dimmed ? '.55' : '1';
-    this.iframe.style.cssText = FRAME_CSS + `position:absolute;z-index:1;margin:0;visibility:visible;left:${px(fx)};top:${px(fy)};width:${px(fw)};height:${px(fh)};`
-      + `clip-path:inset(${px(Y - fy)} ${px(fx + fw - X - W)} ${px(fy + fh - Y - H)} ${px(X - fx)} round ${corner});opacity:${op};transition:opacity .15s`;
+    const op = !this.shown ? '0' : this.dimmed ? '.55' : '1', z = this.zoom || 1;
+    this.iframe.style.cssText = FRAME_CSS + `position:absolute;z-index:1;margin:0;visibility:visible;left:${px(fx)};top:${px(fy)};width:${px(fw * z)};height:${px(fh * z)};${z === 1 ? '' : `transform:scale(${1 / z});transform-origin:0 0;`}`
+      + `clip-path:inset(${px((Y - fy) * z)} ${px((fx + fw - X - W) * z)} ${px((fy + fh - Y - H) * z)} ${px((X - fx) * z)} round ${z === 1 ? corner : `calc(${corner} * ${z})`});opacity:${op};transition:opacity .15s`;
   }
   // PTN Ninja stopped answering mid-run: the frame is down (the puzzle page shows the message, with Retry), and Rush hears
   // it (onDead: the run ends there, rush.js boardDied).

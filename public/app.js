@@ -2578,11 +2578,10 @@ function settingsPage() {
     const sel = (k, label, desc, extra = '') => `<div class="set-item"><label for="st-${k}">${label}</label><select id="st-${k}"${desc ? ` aria-describedby="st-${k}-d"` : ''}></select>
       ${desc ? `<p class="set-desc" id="st-${k}-d">${desc}</p>` : ''}${extra}</div>`;
     el.innerHTML = `<h1>Settings</h1><p class="set-status" id="st-status" role="status"></p>
-      <div class="panel set-ex" id="st-example"></div>
       <div class="panel set-list">
         <p class="set-desc set-note hidden" id="st-note"></p>
-        <div class="set-item"><label for="st-ninja-theme">Board theme</label><select id="st-ninja-theme">
-          <option value="">tinue felt</option><option value="legacy">tinue classic</option>${NINJA_THEMES.map((id) => `<option value="${id}">${themeName(id)}</option>`).join('')}<option value="custom" hidden>Custom</option></select></div>
+        <div class="set-item set-theme"><label for="st-ninja-theme">Board theme</label><select id="st-ninja-theme">
+          <option value="">tinue felt</option><option value="legacy">tinue classic</option>${NINJA_THEMES.map((id) => `<option value="${id}">${themeName(id)}</option>`).join('')}<option value="custom" hidden>Custom</option></select><div class="set-ex" id="st-example"></div></div>
         <div class="set-item"><label for="st-ninja">Board look</label>
           <form id="st-ninja-form" class="set-look"><input id="st-ninja" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="st-ninja-d st-ninja-msg" placeholder="A theme’s code, or &amp;axisLabels=false&amp;theme=zen">
             <button type="submit" id="st-ninja-use">Use</button><button type="button" id="st-ninja-clear">Clear</button></form>
