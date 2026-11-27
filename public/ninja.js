@@ -281,10 +281,12 @@ export class NinjaBoard {
     }, NinjaBoard.MS.heart);
   }
   // GET_THEME, which PTN Ninja answers at once whatever it is showing: true if it did within MS.dead.
+  // (asked again before the answer: the same question, so the first one's wait can't run out unanswered)
   _ping() {
-    return new Promise((r) => {
-      const t = setTimeout(() => { this._pong = null; r(false); }, NinjaBoard.MS.dead);
-      this._pong = () => { clearTimeout(t); this._pong = null; r(true); };
+    return this._pinging ||= new Promise((r) => {
+      const done = (ok) => { this._pong = this._pinging = null; r(ok); };
+      const t = setTimeout(() => done(false), NinjaBoard.MS.dead);
+      this._pong = () => { clearTimeout(t); done(true); };
       // (a frame taken out of the page: no answer, so down after MS.dead like a hung one)
       try { this.iframe.contentWindow?.postMessage({ action: 'GET_THEME' }, ORIGIN); } catch {}
     });

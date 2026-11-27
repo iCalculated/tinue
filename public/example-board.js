@@ -25,6 +25,7 @@ export class ExampleBoard {
     this.board = frame.lend(el.querySelector('.board-host'), { onMove() {}, onDead: () => this.down() });
     this.board.ui({ disableBoard: true });
     for (const b of el.querySelectorAll('[data-ex]')) b.onclick = () => {
+      if (this.at === b.dataset.ex) return;
       this.at = b.dataset.ex;
       for (const x of el.querySelectorAll('[data-ex]')) x.setAttribute('aria-pressed', x === b);
       this.draw();
@@ -61,7 +62,7 @@ export class ExampleBoard {
     this.msg.textContent = text;
     if (!retry) return;
     const b = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Retry' });
-    b.onclick = () => { this.say(SAYS.note); this.board.retry(); };
+    b.onclick = () => { this.board.retry(); this.enter(); };
     this.msg.append(b);
   }
 }

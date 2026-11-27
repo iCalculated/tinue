@@ -31,6 +31,7 @@ const PORT = +process.env.E2E_PORT || 9331, DT = PORT + 1, BASE = `http://127.0.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(process.env.E2E_TMP || os.tmpdir(), 'tinue-e2e-settings-'));
 const DB = path.join(dir, 'e2e.db'), LOG = path.join(dir, 'access.log');
+let ninjaMode = 'ok'; // the stand-in's mode (e2e-standin.mjs)
 let n = 0;
 // A run that hangs still cleans up (its server and Chrome are children: left behind, they'd hold the port and the pipe).
 const kids = [];
@@ -105,7 +106,7 @@ ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
   if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
   else if (m.method === 'Page.javascriptDialogOpening') { console.log('dialog:', m.params.type, m.params.message); cdp('Page.handleJavaScriptDialog', { accept: true }).catch(() => {}); }
-  else if (m.method === 'Fetch.requestPaused' && m.params.request.url.startsWith('https://ptn.ninja/')) standin(cdp, m.params, process.env.E2E_NINJA ? 'real' : 'ok');
+  else if (m.method === 'Fetch.requestPaused' && m.params.request.url.startsWith('https://ptn.ninja/')) standin(cdp, m.params, process.env.E2E_NINJA ? 'real' : ninjaMode);
   else if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails?.exception?.description || m.params.exceptionDetails?.text);
 };
 // (each call gives up after 15 s, naming itself, rather than hang the run)
@@ -523,6 +524,25 @@ try {
       await until(`location.pathname === '${puz}' && ${shown('view-puzzle')}`, 'back again from ' + hash);
     }
     step('Back and Forward between the same puzzle and Settings, History, Leaderboard and Rush show the right page');
+  }
+  if (!process.env.E2E_NINJA) { // the Settings page's example board
+    const ex = () => ev(`JSON.stringify({ lent: !!document.querySelector('#st-example .lent'), down: document.querySelector('#board iframe')?.dataset.down || '', msg: document.querySelector('.set-ex-msg')?.textContent || '' })`).then(JSON.parse);
+    const hop = async (...hs) => { for (const h of hs) { await ev(`(location.hash = '${h}', true)`); await sleep(300); } };
+    await cdp('Page.navigate', { url: BASE + '/?ex1#/settings' }); await until(`!!document.querySelector('#st-example .lent')`, 'the example');
+    for (const k of ['road', 'road', 'flats', 'play']) await ev(`(document.querySelector('[data-ex="${k}"]').click(), true)`);
+    await sleep(3600); assert.deepEqual(await ex(), { lent: true, down: '', msg: '' });
+    ninjaMode = 'slow:4000';
+    await cdp('Page.navigate', { url: BASE + '/?ex2#/settings' }); await sleep(800); await hop('#/', '#/settings', '#/', '#/settings');
+    await until(`!!document.querySelector('#st-example .lent')`, 'the example after hopping', 12000); await sleep(4000);
+    assert.deepEqual(await ex(), { lent: true, down: '', msg: '' }, 'left and entered while loading: still up');
+    await hop('#/'); assert.deepEqual([(await ex()).lent, (await ex()).down], [false, '']);
+    ninjaMode = 'never';
+    await cdp('Page.navigate', { url: BASE + '/?ex3#/settings' }); const retry = `!!document.querySelector('.set-ex-msg button')`;
+    await until(retry, 'Retry', 15000); await ev(`(document.querySelector('.set-ex-msg button').click(), true)`); await sleep(300);
+    assert.match((await ex()).msg, /Loading/); await until(retry, 'Retry again', 15000);
+    ninjaMode = 'ok'; await ev(`(document.querySelector('.set-ex-msg button').click(), true)`);
+    await until(`!!document.querySelector('#st-example .lent')`, 'up at last'); assert.equal((await ex()).msg, '');
+    step('the example board: quick tabs, left and entered while the frame loads, Retry failing then working');
   }
   if (errors.length) console.log('page errors:', errors);
   assert.deepEqual(errors.filter((e) => !/ptn\.ninja|ResizeObserver/i.test(e)), [], 'no page errors');

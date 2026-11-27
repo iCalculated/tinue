@@ -361,7 +361,7 @@ try {
     await clickOn('#rush-again');
     await until(`!!document.querySelector('#rush-board.lent')`, 'on the frame');
     await sleep(500);
-    await ev(`location.hash = '#/settings'`); await sleep(400);
+    await ev(`location.hash = '#/leaderboard'`); await sleep(400);
     assert.ok(!(await lent()) && (await ev(`!document.querySelector('.lend')`)), 'given back');
     const css = await ev(`document.querySelector('#board iframe').style.cssText`);
     assert.ok(!/clip-path/.test(css) && /width: 111\.1/.test(css), 'the puzzle page\'s again: ' + css);
